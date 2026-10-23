@@ -88,9 +88,12 @@ class PaymentOccurrence(Base):
     actual_payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     receipt_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     paid_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    paid_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     overdue_notice_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reminder_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    overdue_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     recurring_payment: Mapped[RecurringPayment] = relationship(back_populates="occurrences")
 

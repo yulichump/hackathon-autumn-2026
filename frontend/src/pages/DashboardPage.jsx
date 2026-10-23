@@ -151,6 +151,7 @@ export default function DashboardPage() {
               <TableCell>Срок</TableCell>
               <TableCell>Статус</TableCell>
               <TableCell>Дата оплаты</TableCell>
+              <TableCell>Отметил</TableCell>
               <TableCell>Просрочка</TableCell>
               <TableCell align="right">Действия</TableCell>
             </TableRow>
@@ -158,7 +159,7 @@ export default function DashboardPage() {
           <TableBody>
             {!loading && occurrences.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} align="center">Платежей нет</TableCell>
+                <TableCell colSpan={9} align="center">Платежей нет</TableCell>
               </TableRow>
             )}
             {occurrences.map((p) => (
@@ -183,6 +184,13 @@ export default function DashboardPage() {
                   />
                 </TableCell>
                 <TableCell>{formatDate(p.actual_payment_date)}</TableCell>
+                <TableCell>
+                  {p.paid_by ? (
+                    <Typography variant="body2" color={p.paid_by.startsWith('@') ? 'info.main' : 'text.primary'}>
+                      {p.paid_by.startsWith('@') ? `${p.paid_by} (Telegram)` : p.paid_by}
+                    </Typography>
+                  ) : '—'}
+                </TableCell>
                 <TableCell>
                   {p.is_overdue ? (
                     <Chip size="small" color="error" label={`${p.days_overdue} дн.`} />

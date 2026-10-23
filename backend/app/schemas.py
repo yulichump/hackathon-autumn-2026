@@ -104,6 +104,7 @@ class PaymentOccurrenceOut(BaseModel):
     actual_payment_date: date | None
     is_overdue: bool = Field(description="Не оплачен и срок прошёл, либо оплачен позже срока")
     days_overdue: int
+    paid_by: str | None = Field(description="Кто отметил оплату: логин или @username из Telegram")
     receipt_url: str | None
     period: Period
     recurring_payment_is_deleted: bool

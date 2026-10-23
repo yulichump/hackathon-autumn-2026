@@ -66,15 +66,19 @@
 ```json
 {"id": 101, "recurring_payment_id": 1, "name": "Аренда офиса", "amount": 50000.0, "currency": "RUB",
  "due_date": "2026-11-01", "status": "unpaid", "actual_payment_date": null, "is_overdue": false,
- "days_overdue": 0, "receipt_url": null, "period": "monthly", "recurring_payment_is_deleted": false,
- "reminder_sent": false}
+ "days_overdue": 0, "paid_by": null, "receipt_url": null, "period": "monthly",
+ "recurring_payment_is_deleted": false, "reminder_sent": false}
 ```
+`paid_by` — кто отметил оплату: логин из панели или `@username` из Telegram (`null`, пока не оплачено).
 
 PATCH:
 - отметить оплату: `{"status": "paid", "actual_payment_date": "2026-10-30"}` (без даты → сегодня; дата в будущем → `422`)
 - отменить оплату: `{"status": "unpaid"}` → `actual_payment_date` очищается
 - исправить фактическую дату: `{"actual_payment_date": "2026-10-28"}`
 - приложить чек: `{"receipt_url": "https://..."}`
+
+Каждое изменение статуса или фактической даты отправляет событие в Telegram-чат (и на `WEBHOOK_URL`, если задан:
+`payment.paid`, `payment.unpaid`, `payment.date_changed`).
 
 У активного платежа всегда есть следующий период: после оплаты текущего сразу появляется следующий со своим статусом.
 

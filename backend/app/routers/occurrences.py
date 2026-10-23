@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 from sqlalchemy import not_, select
 from sqlalchemy.orm import contains_eager
 
@@ -8,6 +8,7 @@ from ..audit import log_action
 from ..config import local_today
 from ..deps import CurrentUser, DbSession
 from ..models import Currency, PaymentOccurrence, PaymentStatus, RecurringPayment
+from ..notifications import EVENT_DATE_CHANGED, EVENT_PAID, EVENT_UNPAID, notify_payment_change
 from ..payments import ensure_occurrences, occurrence_to_dict, overdue_clause
 from ..schemas import PaymentOccurrenceOut, PaymentOccurrenceUpdate
 
@@ -72,7 +73,9 @@ def get_occurrence(occurrence_id: int, _: CurrentUser, db: DbSession):
         "`unpaid` → фактическая дата очищается. Просрочка пересчитывается по фактической дате."
     ),
 )
-def update_occurrence(occurrence_id: int, body: PaymentOccurrenceUpdate, user: CurrentUser, db: DbSession):
+def update_occurrence(
+    occurrence_id: int, body: PaymentOccurrenceUpdate, user: CurrentUser, db: DbSession, background: BackgroundTasks
+):
     occ = _get_occurrence(db, occurrence_id)
     fields = body.model_fields_set
     today = local_today()
@@ -88,6 +91,7 @@ def update_occurrence(occurrence_id: int, body: PaymentOccurrenceUpdate, user: C
         occ.status = PaymentStatus.UNPAID
         occ.actual_payment_date = None
         occ.paid_by_id = None
+        occ.paid_by = None
     else:
         actual = body.actual_payment_date if "actual_payment_date" in fields else occ.actual_payment_date
         actual = actual or today
@@ -97,6 +101,7 @@ def update_occurrence(occurrence_id: int, body: PaymentOccurrenceUpdate, user: C
             )
         if occ.status != PaymentStatus.PAID:
             occ.paid_by_id = user.id
+            occ.paid_by = user.login
         occ.status = PaymentStatus.PAID
         occ.actual_payment_date = actual
 
@@ -110,4 +115,20 @@ def update_occurrence(occurrence_id: int, body: PaymentOccurrenceUpdate, user: C
     )
     db.commit()
     ensure_occurrences(db, [occ.recurring_payment])
+
+    event = _payment_event(before, occ)
+    if event is not None:
+        background.add_task(notify_payment_change, occ.id, event, user.login, before["actual_payment_date"])
     return occurrence_to_dict(occ, today)
+
+
+def _payment_event(before: dict, occ) -> str | None:
+    was_paid = before["status"] == PaymentStatus.PAID
+    is_paid = occ.status == PaymentStatus.PAID
+    if not was_paid and is_paid:
+        return EVENT_PAID
+    if was_paid and not is_paid:
+        return EVENT_UNPAID
+    if is_paid and before["actual_payment_date"] != occ.actual_payment_date:
+        return EVENT_DATE_CHANGED
+    return None

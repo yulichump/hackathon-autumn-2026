@@ -142,6 +142,7 @@ def occurrence_to_dict(occ: PaymentOccurrence, today: date | None = None) -> dic
         "actual_payment_date": occ.actual_payment_date,
         "is_overdue": is_overdue(occ, today),
         "days_overdue": days_overdue(occ, today),
+        "paid_by": occ.paid_by if occ.status == PaymentStatus.PAID else None,
         "receipt_url": occ.receipt_url,
         "period": rp.period,
         "recurring_payment_is_deleted": rp.is_deleted,

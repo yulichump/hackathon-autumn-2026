@@ -737,6 +737,12 @@ components:
         days_overdue:
           type: integer
           title: Days Overdue
+        paid_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Paid By
+          description: 'Кто отметил оплату: логин или @username из Telegram'
         receipt_url:
           anyOf:
           - type: string
@@ -762,6 +768,7 @@ components:
       - actual_payment_date
       - is_overdue
       - days_overdue
+      - paid_by
       - receipt_url
       - period
       - recurring_payment_is_deleted
