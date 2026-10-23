@@ -1,0 +1,1011 @@
+openapi: 3.1.0
+info:
+  title: Invoice Keeper API
+  description: 'Напоминания о регулярных платежах: периоды оплат, просрочки, итоги
+    по валютам, Telegram-бот.'
+  version: 1.0.0
+paths:
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Auth
+      summary: Вход по логину и паролю
+      operationId: login_api_v1_auth_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Auth
+      summary: Текущий пользователь
+      operationId: me_api_v1_auth_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - Auth
+      summary: Завершение текущей сессии
+      operationId: logout_api_v1_auth_logout_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/recurring-payments:
+    get:
+      tags:
+      - Recurring payments
+      summary: Список регулярных платежей
+      operationId: list_recurring_api_v1_recurring_payments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: include_deleted
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Deleted
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecurringPaymentOut'
+                title: Response List Recurring Api V1 Recurring Payments Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Recurring payments
+      summary: Создание регулярного платежа
+      operationId: create_recurring_api_v1_recurring_payments_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringPaymentCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringPaymentOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/recurring-payments/{payment_id}:
+    get:
+      tags:
+      - Recurring payments
+      summary: Регулярный платёж по id
+      operationId: get_recurring_api_v1_recurring_payments__payment_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: payment_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Payment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringPaymentOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Recurring payments
+      summary: Прекращение платежа с сохранением истории
+      operationId: delete_recurring_api_v1_recurring_payments__payment_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: payment_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Payment Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payment-occurrences:
+    get:
+      tags:
+      - Payment occurrences
+      summary: Список периодов оплаты (с фильтрами)
+      operationId: list_occurrences_api_v1_payment_occurrences_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/PaymentStatus'
+          - type: 'null'
+          title: Status
+      - name: currency
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/Currency'
+          - type: 'null'
+          title: Currency
+      - name: is_overdue
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Overdue
+      - name: recurring_payment_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Recurring Payment Id
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          description: Срок оплаты с (включительно)
+          title: Date From
+        description: Срок оплаты с (включительно)
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          description: Срок оплаты по (включительно)
+          title: Date To
+        description: Срок оплаты по (включительно)
+      - name: include_deleted
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Показывать историю удалённых регулярных платежей
+          default: true
+          title: Include Deleted
+        description: Показывать историю удалённых регулярных платежей
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentOccurrenceOut'
+                title: Response List Occurrences Api V1 Payment Occurrences Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payment-occurrences/{occurrence_id}:
+    get:
+      tags:
+      - Payment occurrences
+      summary: Конкретный период оплаты
+      operationId: get_occurrence_api_v1_payment_occurrences__occurrence_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: occurrence_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Occurrence Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOccurrenceOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - Payment occurrences
+      summary: Подтверждение/отмена оплаты, исправление фактической даты
+      description: Срок оплаты (due_date) не меняется. `paid` без даты → фактическая
+        дата = сегодня. `unpaid` → фактическая дата очищается. Просрочка пересчитывается
+        по фактической дате.
+      operationId: update_occurrence_api_v1_payment_occurrences__occurrence_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: occurrence_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Occurrence Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentOccurrenceUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOccurrenceOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments/summary:
+    get:
+      tags:
+      - Summary
+      summary: Итоговые суммы по валютам
+      description: 'Считается отдельно по RUB/USD/EUR, без конвертации. `total_overdue`
+        — неоплаченные периоды с прошедшим сроком. Фильтр по сроку оплаты: date_from
+        / date_to (например, «итоги на дату»: date_to=YYYY-MM-DD).'
+      operationId: payments_summary_api_v1_payments_summary_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/CurrencySummary'
+                propertyNames:
+                  $ref: '#/components/schemas/Currency'
+                title: Response Payments Summary Api V1 Payments Summary Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments/budget:
+    get:
+      tags:
+      - Summary
+      summary: Бюджет на месяц или год по валютам
+      description: Плановые расходы по расписанию активных платежей + уже оплаченное
+        за период. Без month — весь год.
+      operationId: payments_budget_api_v1_payments_budget_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: year
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2100
+          minimum: 2000
+          title: Year
+      - name: month
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 12
+            minimum: 1
+          - type: 'null'
+          title: Month
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/audit-logs:
+    get:
+      tags:
+      - Summary
+      - Audit
+      summary: Журнал действий (админ)
+      operationId: audit_logs_api_v1_audit_logs_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLogOut'
+                title: Response Audit Logs Api V1 Audit Logs Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/users:
+    get:
+      tags:
+      - Users (admin)
+      summary: Список обычных пользователей
+      operationId: list_users_api_v1_users_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/UserOut'
+                type: array
+                title: Response List Users Api V1 Users Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - Users (admin)
+      summary: Создание обычного пользователя
+      operationId: create_user_api_v1_users_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/users/{user_id}:
+    patch:
+      tags:
+      - Users (admin)
+      summary: Изменение пользователя
+      operationId: update_user_api_v1_users__user_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: User Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Users (admin)
+      summary: Удаление пользователя
+      operationId: delete_user_api_v1_users__user_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: User Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/health:
+    get:
+      tags:
+      - System
+      summary: Проверка работоспособности
+      operationId: health_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    AuditLogOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        actor:
+          type: string
+          title: Actor
+        action:
+          type: string
+          title: Action
+        details:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Details
+      type: object
+      required:
+      - id
+      - created_at
+      - actor
+      - action
+      - details
+      title: AuditLogOut
+    BudgetCurrency:
+      properties:
+        planned:
+          type: number
+          title: Planned
+          default: 0.0
+        paid:
+          type: number
+          title: Paid
+          default: 0.0
+      type: object
+      title: BudgetCurrency
+    BudgetResponse:
+      properties:
+        date_from:
+          type: string
+          format: date
+          title: Date From
+        date_to:
+          type: string
+          format: date
+          title: Date To
+        currencies:
+          additionalProperties:
+            $ref: '#/components/schemas/BudgetCurrency'
+          propertyNames:
+            $ref: '#/components/schemas/Currency'
+          type: object
+          title: Currencies
+      type: object
+      required:
+      - date_from
+      - date_to
+      - currencies
+      title: BudgetResponse
+    Currency:
+      type: string
+      enum:
+      - RUB
+      - USD
+      - EUR
+      title: Currency
+    CurrencySummary:
+      properties:
+        total_planned:
+          type: number
+          title: Total Planned
+          default: 0.0
+        total_paid:
+          type: number
+          title: Total Paid
+          default: 0.0
+        total_unpaid:
+          type: number
+          title: Total Unpaid
+          default: 0.0
+        total_overdue:
+          type: number
+          title: Total Overdue
+          default: 0.0
+      type: object
+      title: CurrencySummary
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    LoginRequest:
+      properties:
+        login:
+          type: string
+          title: Login
+          examples:
+          - admin
+        password:
+          type: string
+          title: Password
+          examples:
+          - password123
+      type: object
+      required:
+      - login
+      - password
+      title: LoginRequest
+    MeResponse:
+      properties:
+        id:
+          type: integer
+          title: Id
+        login:
+          type: string
+          title: Login
+        role:
+          $ref: '#/components/schemas/Role'
+      type: object
+      required:
+      - id
+      - login
+      - role
+      title: MeResponse
+    MessageResponse:
+      properties:
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - message
+      title: MessageResponse
+    PaymentOccurrenceOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        recurring_payment_id:
+          type: integer
+          title: Recurring Payment Id
+        name:
+          type: string
+          title: Name
+        amount:
+          type: number
+          title: Amount
+        currency:
+          $ref: '#/components/schemas/Currency'
+        due_date:
+          type: string
+          format: date
+          title: Due Date
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        actual_payment_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Actual Payment Date
+        is_overdue:
+          type: boolean
+          title: Is Overdue
+          description: Не оплачен и срок прошёл, либо оплачен позже срока
+        days_overdue:
+          type: integer
+          title: Days Overdue
+        receipt_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Receipt Url
+        period:
+          $ref: '#/components/schemas/Period'
+        recurring_payment_is_deleted:
+          type: boolean
+          title: Recurring Payment Is Deleted
+        reminder_sent:
+          type: boolean
+          title: Reminder Sent
+      type: object
+      required:
+      - id
+      - recurring_payment_id
+      - name
+      - amount
+      - currency
+      - due_date
+      - status
+      - actual_payment_date
+      - is_overdue
+      - days_overdue
+      - receipt_url
+      - period
+      - recurring_payment_is_deleted
+      - reminder_sent
+      title: PaymentOccurrenceOut
+    PaymentOccurrenceUpdate:
+      properties:
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/PaymentStatus'
+          - type: 'null'
+        actual_payment_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Actual Payment Date
+          description: Фактическая дата оплаты; при status=paid без даты подставляется
+            сегодня
+        receipt_url:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Receipt Url
+          description: Ссылка на чек
+      type: object
+      title: PaymentOccurrenceUpdate
+    PaymentStatus:
+      type: string
+      enum:
+      - paid
+      - unpaid
+      title: PaymentStatus
+    Period:
+      type: string
+      enum:
+      - daily
+      - weekly
+      - monthly
+      - quarterly
+      - yearly
+      title: Period
+    RecurringPaymentCreate:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+          examples:
+          - Сервер
+        amount:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: string
+          title: Amount
+          examples:
+          - 20.0
+        currency:
+          $ref: '#/components/schemas/Currency'
+          examples:
+          - USD
+        next_payment_date:
+          type: string
+          format: date
+          title: Next Payment Date
+          description: Дата ближайшей (первой) оплаты
+          examples:
+          - '2026-11-01'
+        period:
+          $ref: '#/components/schemas/Period'
+          default: monthly
+      type: object
+      required:
+      - name
+      - amount
+      - currency
+      - next_payment_date
+      title: RecurringPaymentCreate
+    RecurringPaymentOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        name:
+          type: string
+          title: Name
+        amount:
+          type: number
+          title: Amount
+        currency:
+          $ref: '#/components/schemas/Currency'
+        next_payment_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Next Payment Date
+          description: Ближайший неоплаченный период (включая просроченные)
+        period:
+          $ref: '#/components/schemas/Period'
+        is_deleted:
+          type: boolean
+          title: Is Deleted
+        start_date:
+          type: string
+          format: date
+          title: Start Date
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - amount
+      - currency
+      - next_payment_date
+      - period
+      - is_deleted
+      - start_date
+      - created_at
+      title: RecurringPaymentOut
+    Role:
+      type: string
+      enum:
+      - admin
+      - user
+      title: Role
+    TokenResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        token_type:
+          type: string
+          const: bearer
+          title: Token Type
+          default: bearer
+        role:
+          $ref: '#/components/schemas/Role'
+      type: object
+      required:
+      - access_token
+      - role
+      title: TokenResponse
+    UserCreate:
+      properties:
+        login:
+          type: string
+          maxLength: 50
+          minLength: 3
+          pattern: ^[A-Za-z0-9_.\-]+$
+          title: Login
+        password:
+          type: string
+          maxLength: 72
+          minLength: 6
+          title: Password
+        role:
+          type: string
+          const: user
+          title: Role
+          default: user
+      type: object
+      required:
+      - login
+      - password
+      title: UserCreate
+    UserOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        login:
+          type: string
+          title: Login
+        role:
+          $ref: '#/components/schemas/Role'
+        is_active:
+          type: boolean
+          title: Is Active
+      type: object
+      required:
+      - id
+      - login
+      - role
+      - is_active
+      title: UserOut
+    UserUpdate:
+      properties:
+        login:
+          anyOf:
+          - type: string
+            maxLength: 50
+            minLength: 3
+            pattern: ^[A-Za-z0-9_.\-]+$
+          - type: 'null'
+          title: Login
+        password:
+          anyOf:
+          - type: string
+            maxLength: 72
+            minLength: 6
+          - type: 'null'
+          title: Password
+        is_active:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Active
+      type: object
+      title: UserUpdate
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      description: JWT из POST /api/v1/auth/login
+      scheme: bearer
