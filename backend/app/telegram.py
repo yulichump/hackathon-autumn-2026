@@ -33,9 +33,22 @@ class TelegramBot:
             description = data.get("description") or ""
             if NOT_MODIFIED in description:
                 return True
+            new_chat_id = (data.get("parameters") or {}).get("migrate_to_chat_id")
+            if new_chat_id and self.is_target_chat(params.get("chat_id")):
+                self._follow_migration(new_chat_id)
+                return await self.call(method, **(params | {"chat_id": new_chat_id}))
             logger.warning("Telegram %s error: %s", method, description)
             return None
         return data.get("result")
+
+    def _follow_migration(self, new_chat_id: int) -> None:
+        """Группа стала супергруппой и сменила ID: продолжаем писать в новый чат до перезапуска."""
+        logger.warning(
+            "Чат %s преобразован в супергруппу %s. Укажите TELEGRAM_CHAT_ID=%s в .env, иначе после перезапуска "
+            "бот снова начнёт с устаревшего ID.",
+            self.chat_id, new_chat_id, new_chat_id,
+        )
+        self.chat_id = str(new_chat_id)
 
     async def send_message(
         self, text: str, chat_id=None, reply_markup: dict | None = None, reply_to: int | None = None

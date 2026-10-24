@@ -68,6 +68,11 @@ npm run dev -- --host 127.0.0.1
 (другой адрес — переменная `VITE_BACKEND_URL`). Если фронтенд и API на разных доменах, задайте `VITE_API_URL`,
 например `https://api.example.com/api/v1`.
 
+### Продакшен
+
+Весь стек (PostgreSQL, бекенд с ботом, фронтенд за Caddy с автоматическим HTTPS) поднимается одной командой
+`docker compose -f docker-compose.prod.yml up -d --build`. Пошагово, от покупки VPS до бэкапов: [DEPLOY.md](DEPLOY.md).
+
 ### Учётные записи
 
 - администратор — `ADMIN_LOGIN` / `ADMIN_PASSWORD` из `backend/.env`;
