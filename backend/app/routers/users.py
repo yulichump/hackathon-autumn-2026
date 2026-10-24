@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, Response, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select
 
 from ..audit import log_action
 from ..deps import AdminUser, DbSession
-from ..models import PaymentOccurrence, Role, User
+from ..models import Role, User
 from ..schemas import UserCreate, UserOut, UserUpdate
 from ..security import hash_password
 
@@ -22,7 +22,7 @@ def _get_regular_user(db: DbSession, user_id: int) -> User:
 
 
 def _ensure_login_free(db: DbSession, login: str) -> None:
-    if db.scalar(select(User.id).where(User.login == login)):
+    if db.scalar(select(User.id).where(func.lower(User.login) == login.lower())):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Пользователь с таким логином уже существует")
 
 
@@ -46,7 +46,7 @@ def create_user(body: UserCreate, admin: AdminUser, db: DbSession):
 def update_user(user_id: int, body: UserUpdate, admin: AdminUser, db: DbSession):
     user = _get_regular_user(db, user_id)
     changes = body.model_dump(exclude_unset=True, exclude_none=True)
-    if "login" in changes and changes["login"] != user.login:
+    if "login" in changes and changes["login"].lower() != user.login.lower():
         _ensure_login_free(db, changes["login"])
         user.login = changes["login"]
     if "password" in changes:
@@ -61,7 +61,7 @@ def update_user(user_id: int, body: UserUpdate, admin: AdminUser, db: DbSession)
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удаление пользователя")
 def delete_user(user_id: int, admin: AdminUser, db: DbSession):
     user = _get_regular_user(db, user_id)
-    db.execute(update(PaymentOccurrence).where(PaymentOccurrence.paid_by_id == user.id).values(paid_by_id=None))
+    # Ссылки на пользователя (paid_by_id, created_by_id, audit_logs.user_id) обнуляет сама БД: ON DELETE SET NULL
     log_action(db, admin, "user.delete", {"user_id": user.id, "login": user.login})
     db.delete(user)
     db.commit()

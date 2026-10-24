@@ -7,7 +7,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    database_url: str = "sqlite:///./data/invoice_keeper.db"
+    database_url: str = "postgresql+psycopg://invoice:invoice@localhost:5432/invoice_keeper"
+    db_pool_size: int = 10
+    db_max_overflow: int = 10
+    db_pool_recycle_seconds: int = 1800
+    db_echo: bool = False
+    auto_migrate: bool = False
+
     secret_key: str = "change-me-in-env"
     access_token_expire_minutes: int = 60 * 24
 

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import notifications
 from .bootstrap import prepare_data
 from .config import settings
-from .db import init_db
+from .db import check_connection, upgrade_head
 from .routers import auth, occurrences, recurring, summary, users
 from .telegram import TelegramBot
 
@@ -22,7 +22,9 @@ API_PREFIX = "/api/v1"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    if settings.auto_migrate:
+        upgrade_head()
+    check_connection()
     prepare_data()
 
     tasks = []

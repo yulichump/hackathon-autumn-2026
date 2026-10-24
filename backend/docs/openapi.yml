@@ -578,7 +578,8 @@ components:
           title: Action
         details:
           anyOf:
-          - type: string
+          - additionalProperties: true
+            type: object
           - type: 'null'
           title: Details
       type: object

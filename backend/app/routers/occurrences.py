@@ -2,7 +2,7 @@ from datetime import date
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 from sqlalchemy import not_, select
-from sqlalchemy.orm import contains_eager
+from sqlalchemy.orm import contains_eager, selectinload
 
 from ..audit import log_action
 from ..config import local_today
@@ -39,7 +39,7 @@ def list_occurrences(
     query = (
         select(PaymentOccurrence)
         .join(PaymentOccurrence.recurring_payment)
-        .options(contains_eager(PaymentOccurrence.recurring_payment))
+        .options(contains_eager(PaymentOccurrence.recurring_payment), selectinload(PaymentOccurrence.notifications))
         .order_by(PaymentOccurrence.due_date, PaymentOccurrence.id)
     )
     if status_ is not None:
@@ -55,7 +55,7 @@ def list_occurrences(
     if date_to is not None:
         query = query.where(PaymentOccurrence.due_date <= date_to)
     if not include_deleted:
-        query = query.where(RecurringPayment.is_deleted.is_(False))
+        query = query.where(RecurringPayment.deleted_at.is_(None))
     return [occurrence_to_dict(o, today) for o in db.scalars(query)]
 
 

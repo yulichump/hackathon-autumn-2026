@@ -107,5 +107,5 @@ PATCH:
 ## 6. Прочее
 
 - `GET /docs` — Swagger UI, `GET /openapi.json` — схема, `GET /redoc`
-- `GET /audit-logs?limit=100` — журнал входов и действий (admin)
+- `GET /audit-logs?limit=100` — журнал входов и действий (admin); `details` — JSON-объект или `null`
 - `GET /health`

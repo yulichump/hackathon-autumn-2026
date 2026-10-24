@@ -1,25 +1,37 @@
-from importlib import import_module
+import logging
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.engine import make_url
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
 
-_url = make_url(settings.database_url)
-_connect_args = {}
-if _url.get_backend_name() == "sqlite":
-    _connect_args["check_same_thread"] = False
-    if _url.database and _url.database != ":memory:":
-        Path(_url.database).parent.mkdir(parents=True, exist_ok=True)
+logger = logging.getLogger("db")
 
-engine = create_engine(settings.database_url, connect_args=_connect_args)
+# Единые имена ограничений и индексов: Alembic может надёжно их менять и удалять.
+NAMING_CONVENTION = {
+    "ix": "ix_%(table_name)s_%(column_0_N_name)s",
+    "uq": "uq_%(table_name)s_%(column_0_N_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
+engine = create_engine(
+    settings.database_url,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_recycle=settings.db_pool_recycle_seconds,
+    pool_pre_ping=True,
+    echo=settings.db_echo,
+)
 SessionLocal = sessionmaker(engine, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
 def get_db():
@@ -27,22 +39,15 @@ def get_db():
         yield db
 
 
-def _add_missing_columns() -> None:
-    """Добавляет в существующие таблицы новые nullable-колонки моделей, чтобы старая база не требовала пересоздания."""
-    inspector = inspect(engine)
-    with engine.begin() as conn:
-        for table in Base.metadata.sorted_tables:
-            if not inspector.has_table(table.name):
-                continue
-            existing = {column["name"] for column in inspector.get_columns(table.name)}
-            for column in table.columns:
-                if column.name not in existing:
-                    column_type = column.type.compile(engine.dialect)
-                    conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {column_type}'))
+def check_connection() -> None:
+    """Падает с понятной ошибкой, если PostgreSQL недоступен."""
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
 
 
-def init_db() -> None:
-    """Создаёт таблицы всех моделей (модуль models импортируется, чтобы зарегистрировать их в Base)."""
-    import_module(".models", __package__)
-    Base.metadata.create_all(engine)
-    _add_missing_columns()
+def upgrade_head() -> None:
+    """Применяет миграции Alembic (то же, что `alembic upgrade head`)."""
+    backend_dir = Path(__file__).resolve().parent.parent
+    cfg = Config(str(backend_dir / "alembic.ini"))
+    cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+    command.upgrade(cfg, "head")
