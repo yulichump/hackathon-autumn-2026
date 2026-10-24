@@ -11,7 +11,7 @@ from .bootstrap import prepare_data
 from .config import settings
 from .db import check_connection, upgrade_head
 from .routers import auth, occurrences, recurring, summary, users
-from .telegram import TelegramBot
+from .telegram import TelegramBot, describe_route
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -29,7 +29,13 @@ async def lifespan(app: FastAPI):
 
     tasks = []
     if settings.telegram_bot_token:
-        notifications.bot = TelegramBot(settings.telegram_bot_token, settings.telegram_chat_id)
+        notifications.bot = TelegramBot(
+            settings.telegram_bot_token,
+            settings.telegram_chat_id,
+            api_url=settings.telegram_api_url,
+            proxy=settings.telegram_proxy,
+        )
+        logger.info("Telegram Bot API: %s", describe_route(settings.telegram_api_url, settings.telegram_proxy))
         tasks.append(asyncio.create_task(notifications.polling_loop()))
         if not settings.telegram_chat_id:
             logger.warning("TELEGRAM_CHAT_ID не задан: отправьте боту /chatid в нужном чате и пропишите ID в .env")

@@ -3,7 +3,7 @@ import json
 
 import httpx
 
-from app.telegram import TelegramBot
+from app.telegram import TelegramBot, describe_route
 
 OLD_CHAT = "-4000000001"
 NEW_CHAT = -1009999999999
@@ -51,3 +51,23 @@ def test_migration_of_other_chat_does_not_switch_target():
 
     assert message is None
     assert bot.chat_id == "-100777"
+
+
+def test_custom_api_url_is_used_for_requests():
+    bot = TelegramBot("123:abc", "-1", api_url="https://tg-relay.example.workers.dev/")
+
+    assert str(bot._client.base_url) == "https://tg-relay.example.workers.dev/bot123:abc/"
+
+
+def test_socks_proxy_is_accepted():
+    bot = TelegramBot("123:abc", "-1", proxy="socks5://user:secret@10.0.0.5:1080")
+
+    assert bot.can_send
+
+
+def test_route_description_hides_proxy_credentials():
+    route = describe_route("https://api.telegram.org", "socks5://user:secret@10.0.0.5:1080")
+
+    assert route == "api.telegram.org через прокси socks5://10.0.0.5:1080"
+    assert "secret" not in route and "user" not in route
+    assert describe_route("https://tg-relay.example.workers.dev", "") == "tg-relay.example.workers.dev"
