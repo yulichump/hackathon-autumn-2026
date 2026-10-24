@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..audit import log_action
 from ..deps import CurrentUser, DbSession, TokenPayload
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 @router.post("/login", response_model=TokenResponse, summary="Вход по логину и паролю")
 def login(body: LoginRequest, db: DbSession):
-    user = db.scalar(select(User).where(User.login == body.login))
+    user = db.scalar(select(User).where(func.lower(User.login) == body.login.lower()))
     if user is None or not verify_password(body.password, user.password_hash):
         log_action(db, None, "auth.login_failed", {"login": body.login}, actor=body.login)
         db.commit()

@@ -8,13 +8,14 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import httpx
-from sqlalchemy import select, update
-from sqlalchemy.orm import contains_eager
+from sqlalchemy import delete, literal, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import contains_eager, selectinload
 
 from .audit import log_action
 from .config import local_today, settings, utcnow
 from .db import SessionLocal
-from .models import PaymentOccurrence, PaymentStatus, RecurringPayment
+from .models import NotificationKind, PaymentNotification, PaymentOccurrence, PaymentStatus, RecurringPayment
 from .payments import compute_summary, ensure_occurrences
 from .telegram import TelegramBot
 
@@ -22,8 +23,8 @@ logger = logging.getLogger("notifications")
 
 bot: TelegramBot | None = None
 
-REMINDER = "reminder"
-OVERDUE = "overdue"
+REMINDER = NotificationKind.REMINDER
+OVERDUE = NotificationKind.OVERDUE
 
 EVENT_PAID = "paid"
 EVENT_UNPAID = "unpaid"
@@ -125,18 +126,21 @@ def _collect_pending() -> list[dict]:
             select(PaymentOccurrence)
             .join(PaymentOccurrence.recurring_payment)
             .options(contains_eager(PaymentOccurrence.recurring_payment))
-            .where(RecurringPayment.is_deleted.is_(False), PaymentOccurrence.status == PaymentStatus.UNPAID)
+            .where(RecurringPayment.deleted_at.is_(None), PaymentOccurrence.status == PaymentStatus.UNPAID)
             .order_by(PaymentOccurrence.due_date)
         )
         reminders = db.scalars(
             base.where(
-                PaymentOccurrence.reminder_sent_at.is_(None),
+                ~PaymentOccurrence.notifications.any(PaymentNotification.kind == REMINDER),
                 PaymentOccurrence.due_date >= today,
                 PaymentOccurrence.due_date <= horizon,
             )
         ).all()
         overdue = db.scalars(
-            base.where(PaymentOccurrence.overdue_notice_sent_at.is_(None), PaymentOccurrence.due_date < today)
+            base.where(
+                ~PaymentOccurrence.notifications.any(PaymentNotification.kind == OVERDUE),
+                PaymentOccurrence.due_date < today,
+            )
         ).all()
         return [
             {
@@ -150,54 +154,38 @@ def _collect_pending() -> list[dict]:
         ]
 
 
-def _sent_column(kind: str):
-    return PaymentOccurrence.reminder_sent_at if kind == REMINDER else PaymentOccurrence.overdue_notice_sent_at
+def _claim(occ_id: int, kind: NotificationKind) -> int | None:
+    """Атомарно «занимает» оповещение: INSERT ... ON CONFLICT DO NOTHING по UNIQUE (occurrence_id, kind).
 
-
-def _message_column(kind: str):
-    return PaymentOccurrence.reminder_message_id if kind == REMINDER else PaymentOccurrence.overdue_message_id
-
-
-def _claim(occ_id: int, kind: str):
-    """Атомарно занимает оповещение (UPDATE ... WHERE sent_at IS NULL), чтобы даже несколько
-    запущенных экземпляров бекенда не отправили одно и то же дважды. Возвращает метку или None."""
-    column = _sent_column(kind)
-    stamp = utcnow().replace(tzinfo=None)
+    Строка вставляется, только если период всё ещё не оплачен. Даже при нескольких запущенных
+    экземплярах бекенда ровно один получит id записи, остальные — None. Возвращает id записи журнала.
+    """
+    still_unpaid = select(PaymentOccurrence.id, literal(kind.value).cast(PaymentNotification.kind.type)).where(
+        PaymentOccurrence.id == occ_id, PaymentOccurrence.status == PaymentStatus.UNPAID
+    )
+    statement = (
+        pg_insert(PaymentNotification)
+        .from_select(["occurrence_id", "kind"], still_unpaid)
+        .on_conflict_do_nothing(index_elements=["occurrence_id", "kind"])
+        .returning(PaymentNotification.id)
+    )
     with SessionLocal() as db:
-        result = db.execute(
-            update(PaymentOccurrence)
-            .where(
-                PaymentOccurrence.id == occ_id,
-                PaymentOccurrence.status == PaymentStatus.UNPAID,
-                column.is_(None),
-            )
-            .values({column: stamp})
-            .execution_options(synchronize_session=False)
-        )
+        notification_id = db.execute(statement).scalar_one_or_none()
         db.commit()
-        return stamp if result.rowcount == 1 else None
+        return notification_id
 
 
-def _release(occ_id: int, kind: str, stamp) -> None:
-    """Снимает отметку, если доставка не удалась, — следующая проверка повторит отправку."""
-    column = _sent_column(kind)
+def _release(notification_id: int) -> None:
+    """Удаляет запись, если доставка не удалась, — следующая проверка повторит отправку."""
     with SessionLocal() as db:
-        db.execute(
-            update(PaymentOccurrence)
-            .where(PaymentOccurrence.id == occ_id, column == stamp)
-            .values({column: None})
-            .execution_options(synchronize_session=False)
-        )
+        db.execute(delete(PaymentNotification).where(PaymentNotification.id == notification_id))
         db.commit()
 
 
-def _store_message_id(occ_id: int, kind: str, message_id: int) -> None:
+def _store_message_id(notification_id: int, message_id: int) -> None:
     with SessionLocal() as db:
         db.execute(
-            update(PaymentOccurrence)
-            .where(PaymentOccurrence.id == occ_id)
-            .values({_message_column(kind): message_id})
-            .execution_options(synchronize_session=False)
+            update(PaymentNotification).where(PaymentNotification.id == notification_id).values(telegram_message_id=message_id)
         )
         db.commit()
 
@@ -227,21 +215,21 @@ async def run_reminders() -> None:
                 _warned_no_channels = True
             return
         for item in items:
-            stamp = await asyncio.to_thread(_claim, item["id"], item["kind"])
-            if stamp is None:
+            notification_id = await asyncio.to_thread(_claim, item["id"], item["kind"])
+            if notification_id is None:
                 continue
             delivered = False
             if _telegram_ready():
                 message = await bot.send_message(item["text"], reply_markup=_paid_button(item["id"]))
                 if message is not None:
                     delivered = True
-                    await asyncio.to_thread(_store_message_id, item["id"], item["kind"], message["message_id"])
+                    await asyncio.to_thread(_store_message_id, notification_id, message["message_id"])
             if settings.webhook_url:
                 delivered = await _send_webhook(item["webhook"]) or delivered
             if delivered:
                 logger.info("Sent %s for occurrence %s", item["kind"], item["id"])
             else:
-                await asyncio.to_thread(_release, item["id"], item["kind"], stamp)
+                await asyncio.to_thread(_release, notification_id)
 
 
 async def trigger_reminders() -> None:
@@ -291,20 +279,23 @@ def _event_text(occ: PaymentOccurrence, event: str, actor: str, previous_date: d
 
 def _event_context(occ_id: int, event: str, actor: str, previous_date: date | None) -> dict | None:
     with SessionLocal() as db:
-        occ = db.get(PaymentOccurrence, occ_id)
+        occ = db.scalar(
+            select(PaymentOccurrence)
+            .where(PaymentOccurrence.id == occ_id)
+            .options(selectinload(PaymentOccurrence.notifications))
+        )
         if occ is None:
             return None
         edits = []
-        for kind, message_id, sent_at in (
-            (REMINDER, occ.reminder_message_id, occ.reminder_sent_at),
-            (OVERDUE, occ.overdue_message_id, occ.overdue_notice_sent_at),
-        ):
-            if message_id and sent_at:
-                text, markup = _current_message(occ, kind, sent_at)
-                edits.append({"message_id": message_id, "text": text, "markup": markup})
+        message_ids = {}
+        for notification in occ.notifications:
+            if notification.telegram_message_id:
+                text, markup = _current_message(occ, notification.kind, notification.sent_at)
+                edits.append({"message_id": notification.telegram_message_id, "text": text, "markup": markup})
+                message_ids[notification.kind] = notification.telegram_message_id
         return {
             "text": _event_text(occ, event, actor, previous_date, local_today()),
-            "reply_to": occ.overdue_message_id or occ.reminder_message_id,
+            "reply_to": message_ids.get(OVERDUE) or message_ids.get(REMINDER),
             "edits": edits,
             "webhook": {"event": f"payment.{event}", "actor": actor, "occurrence": _occurrence_payload(occ)},
         }
@@ -385,7 +376,7 @@ def _list_text(kind: str) -> str:
         )
         if kind == "upcoming":
             query = query.where(
-                RecurringPayment.is_deleted.is_(False),
+                RecurringPayment.deleted_at.is_(None),
                 PaymentOccurrence.due_date >= today,
                 PaymentOccurrence.due_date <= today + timedelta(days=30),
             )

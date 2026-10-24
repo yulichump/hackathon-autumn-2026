@@ -1,20 +1,20 @@
 """Бизнес-логика: расписание периодов, генерация оплат, просрочка, итоги."""
 
 import calendar
-import threading
 from collections.abc import Iterable
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from .config import local_today
-from .models import Currency, PaymentOccurrence, PaymentStatus, Period, RecurringPayment
+from .models import Currency, NotificationKind, PaymentOccurrence, PaymentStatus, Period, RecurringPayment
 
 MAX_NEW_OCCURRENCES_PER_RUN = 400
 
-_generation_lock = threading.Lock()
+# Ключ advisory-блокировки PostgreSQL: генерацию периодов одновременно ведёт только один процесс/поток.
+_GENERATION_LOCK_KEY = 7_201_926
 
 
 def add_months(start: date, months: int) -> date:
@@ -75,34 +75,35 @@ def ensure_occurrences(db: Session, payments: Iterable[RecurringPayment] | None 
     """
     today = local_today()
     created = 0
-    with _generation_lock:
-        if payments is None:
-            payments = db.scalars(select(RecurringPayment).where(RecurringPayment.is_deleted.is_(False))).all()
-        for payment in payments:
-            if payment.is_deleted:
-                continue
-            last = db.scalar(
-                select(PaymentOccurrence)
-                .where(PaymentOccurrence.recurring_payment_id == payment.id)
-                .order_by(PaymentOccurrence.period_index.desc())
-                .limit(1)
+    # Транзакционная блокировка снимается на commit; работает и между несколькими экземплярами бэкенда.
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _GENERATION_LOCK_KEY})
+    if payments is None:
+        payments = db.scalars(select(RecurringPayment).where(RecurringPayment.deleted_at.is_(None))).all()
+    for payment in payments:
+        if payment.is_deleted:
+            continue
+        last = db.scalar(
+            select(PaymentOccurrence)
+            .where(PaymentOccurrence.recurring_payment_id == payment.id)
+            .order_by(PaymentOccurrence.period_index.desc())
+            .limit(1)
+        )
+        budget = MAX_NEW_OCCURRENCES_PER_RUN
+        while budget and (last is None or last.due_date <= today or last.status == PaymentStatus.PAID):
+            index = 0 if last is None else last.period_index + 1
+            last = PaymentOccurrence(
+                recurring_payment_id=payment.id,
+                period_index=index,
+                due_date=due_date_for(payment.start_date, payment.period, index),
+                amount=payment.amount,
+                currency=payment.currency,
+                status=PaymentStatus.UNPAID,
             )
-            budget = MAX_NEW_OCCURRENCES_PER_RUN
-            while budget and (last is None or last.due_date <= today or last.status == PaymentStatus.PAID):
-                index = 0 if last is None else last.period_index + 1
-                last = PaymentOccurrence(
-                    recurring_payment_id=payment.id,
-                    period_index=index,
-                    due_date=due_date_for(payment.start_date, payment.period, index),
-                    amount=payment.amount,
-                    currency=payment.currency,
-                    status=PaymentStatus.UNPAID,
-                )
-                db.add(last)
-                db.flush()
-                created += 1
-                budget -= 1
-        db.commit()
+            db.add(last)
+            db.flush()
+            created += 1
+            budget -= 1
+    db.commit()
     return created
 
 
@@ -146,7 +147,7 @@ def occurrence_to_dict(occ: PaymentOccurrence, today: date | None = None) -> dic
         "receipt_url": occ.receipt_url,
         "period": rp.period,
         "recurring_payment_is_deleted": rp.is_deleted,
-        "reminder_sent": occ.reminder_sent_at is not None,
+        "reminder_sent": any(n.kind == NotificationKind.REMINDER for n in occ.notifications),
     }
 
 
@@ -165,9 +166,17 @@ def recurring_to_dict(db: Session, payment: RecurringPayment) -> dict:
 
 
 def compute_summary(db: Session, date_from: date | None = None, date_to: date | None = None) -> dict[str, dict]:
-    """Итоги по каждой валюте отдельно (без конвертации) по срокам периодов в диапазоне."""
+    """Итоги по каждой валюте отдельно (без конвертации) по срокам периодов в диапазоне. Считает сама БД."""
     today = local_today()
-    query = select(PaymentOccurrence)
+    unpaid = PaymentOccurrence.status == PaymentStatus.UNPAID
+    amount = PaymentOccurrence.amount
+    query = select(
+        PaymentOccurrence.currency,
+        func.coalesce(func.sum(amount), 0),
+        func.coalesce(func.sum(case((~unpaid, amount), else_=0)), 0),
+        func.coalesce(func.sum(case((unpaid, amount), else_=0)), 0),
+        func.coalesce(func.sum(case((unpaid & (PaymentOccurrence.due_date < today), amount), else_=0)), 0),
+    ).group_by(PaymentOccurrence.currency)
     if date_from:
         query = query.where(PaymentOccurrence.due_date >= date_from)
     if date_to:
@@ -175,18 +184,13 @@ def compute_summary(db: Session, date_from: date | None = None, date_to: date | 
 
     zero = Decimal("0.00")
     result = {
-        c.value: {"total_planned": zero, "total_paid": zero, "total_unpaid": zero, "total_overdue": zero}
-        for c in Currency
+        c.value: {"total_planned": zero, "total_paid": zero, "total_unpaid": zero, "total_overdue": zero} for c in Currency
     }
-    for occ in db.scalars(query):
-        totals = result.setdefault(
-            occ.currency, {"total_planned": zero, "total_paid": zero, "total_unpaid": zero, "total_overdue": zero}
-        )
-        totals["total_planned"] += occ.amount
-        if occ.status == PaymentStatus.PAID:
-            totals["total_paid"] += occ.amount
-        else:
-            totals["total_unpaid"] += occ.amount
-            if today > occ.due_date:
-                totals["total_overdue"] += occ.amount
+    for currency, planned, paid, unpaid_sum, overdue in db.execute(query):
+        result[Currency(currency).value] = {
+            "total_planned": Decimal(planned),
+            "total_paid": Decimal(paid),
+            "total_unpaid": Decimal(unpaid_sum),
+            "total_overdue": Decimal(overdue),
+        }
     return result

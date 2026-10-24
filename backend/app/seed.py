@@ -1,11 +1,12 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from sqlalchemy import select
 
 from .bootstrap import sync_admin
 from .config import local_today
-from .db import SessionLocal, init_db
-from .models import PaymentOccurrence, PaymentStatus, Period, RecurringPayment, Role, User
+from .db import SessionLocal, upgrade_head
+from .models import Currency, PaymentOccurrence, PaymentStatus, Period, RecurringPayment, Role, User
 from .payments import add_months, ensure_occurrences
 from .security import hash_password
 
@@ -13,7 +14,7 @@ DEMO_USERS = [("user1", "user1pass"), ("user2", "user2pass")]
 
 
 def seed() -> None:
-    init_db()
+    upgrade_head()
     sync_admin()
     today = local_today()
     with SessionLocal() as db:
@@ -23,10 +24,10 @@ def seed() -> None:
 
         if db.scalar(select(RecurringPayment.id).limit(1)) is None:
             demo = [
-                ("Аренда офиса", "50000.00", "RUB", add_months(today, -2).replace(day=1), Period.MONTHLY),
-                ("Сервер Aeza", "20.00", "USD", today + timedelta(days=2), Period.MONTHLY),
-                ("Подписка на сервис", "15.00", "EUR", today + timedelta(days=10), Period.MONTHLY),
-                ("Домен", "1500.00", "RUB", today - timedelta(days=5), Period.YEARLY),
+                ("Аренда офиса", Decimal("50000.00"), Currency.RUB, add_months(today, -2).replace(day=1), Period.MONTHLY),
+                ("Сервер Aeza", Decimal("20.00"), Currency.USD, today + timedelta(days=2), Period.MONTHLY),
+                ("Подписка на сервис", Decimal("15.00"), Currency.EUR, today + timedelta(days=10), Period.MONTHLY),
+                ("Домен", Decimal("1500.00"), Currency.RUB, today - timedelta(days=5), Period.YEARLY),
             ]
             payments = []
             for name, amount, currency, start, period in demo:

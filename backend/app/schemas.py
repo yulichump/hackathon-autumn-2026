@@ -150,4 +150,4 @@ class AuditLogOut(BaseModel):
     created_at: datetime
     actor: str
     action: str
-    details: str | None
+    details: dict | None

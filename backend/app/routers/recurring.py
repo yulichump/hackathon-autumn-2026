@@ -24,7 +24,7 @@ def list_recurring(_: CurrentUser, db: DbSession, include_deleted: bool = False)
     ensure_occurrences(db)
     query = select(RecurringPayment).order_by(RecurringPayment.id)
     if not include_deleted:
-        query = query.where(RecurringPayment.is_deleted.is_(False))
+        query = query.where(RecurringPayment.deleted_at.is_(None))
     return [recurring_to_dict(db, p) for p in db.scalars(query)]
 
 
@@ -60,7 +60,6 @@ def create_recurring(body: RecurringPaymentCreate, admin: AdminUser, db: DbSessi
 def delete_recurring(payment_id: int, admin: AdminUser, db: DbSession):
     payment = _get_payment(db, payment_id)
     if not payment.is_deleted:
-        payment.is_deleted = True
         payment.deleted_at = utcnow()
         db.execute(
             delete(PaymentOccurrence).where(

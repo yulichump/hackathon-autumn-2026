@@ -1,6 +1,6 @@
 # Invoice Keeper — бекенд
 
-Напоминания о регулярных платежах: FastAPI + SQLite + Telegram-бот.
+Напоминания о регулярных платежах: FastAPI + PostgreSQL + Telegram-бот.
 Администратор вносит платежи, бот за 3 дня до срока пишет в Telegram-чат, пользователи отмечают оплату.
 
 Описание API для фронтенда — [API.md](API.md). OpenAPI-спецификация — [docs/openapi.json](docs/openapi.json),
@@ -8,42 +8,103 @@
 
 ## Запуск
 
-Нужен Python 3.11+.
+Нужны Python 3.11+ и PostgreSQL 14+ (в Docker — ничего, кроме Docker).
+
+### Вариант 1: Docker (проще всего)
+
+Из корня репозитория:
+
+```bash
+docker compose up --build
+```
+
+Поднимется PostgreSQL и бэкенд, миграции применяются автоматически: http://localhost:8000/api/v1/docs.
+Тестовые данные: `docker compose exec backend python -m app.seed`.
+
+### Вариант 2: вручную
+
+1. Создайте БД и пользователя (или поднимите только PostgreSQL: `docker compose up -d db`):
+
+```sql
+CREATE USER invoice WITH PASSWORD 'invoice';
+CREATE DATABASE invoice_keeper OWNER invoice;
+```
+
+2. Окружение и зависимости:
 
 ```bash
 python -m venv .venv
 ```
 
-Windows:
-```bash
-.venv\Scripts\activate
-```
-
-Linux/macOS:
-```bash
-source .venv/bin/activate
-```
+Windows: `.venv\Scripts\activate`, Linux/macOS: `source .venv/bin/activate`
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Скопируйте `.env.example` в `.env` и заполните значения (см. ниже).
+3. Скопируйте `.env.example` в `.env` и заполните значения (см. ниже; адрес БД — `DATABASE_URL`).
+
+4. Схема БД и тестовые данные:
 
 ```bash
+alembic upgrade head
 python -m app.seed
 ```
+
+5. Сервер:
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-База — файл `data/invoice_keeper.db`, данные сохраняются между перезапусками.
+Данные хранятся в PostgreSQL и сохраняются между перезапусками. Схема, ER-диаграмма и обоснование решений —
+в [docs/DATABASE.md](docs/DATABASE.md).
+
+## Миграции
+
+```bash
+alembic upgrade head                           # применить
+alembic revision --autogenerate -m "описание"  # создать после правки app/models.py
+alembic downgrade -1                           # откатить последнюю
+```
+
+`AUTO_MIGRATE=true` в `.env` применяет миграции при старте приложения (удобно для одного экземпляра).
+
+## Перенос данных из SQLite
+
+Если у вас уже есть данные в старой базе `data/invoice_keeper.db`:
+
+```bash
+alembic upgrade head
+python scripts/migrate_sqlite_to_postgres.py --sqlite data/invoice_keeper.db
+```
+
+Скрипт сохраняет id, переносит всё в одной транзакции (всё или ничего), сверяет число строк и печатает отчёт об исправленных данных.
+`--replace` очищает таблицы PostgreSQL перед переносом.
+
+## Тесты
+
+Тесты идут на настоящем PostgreSQL в отдельной БД (схема создаётся теми же миграциями; **содержимое этой БД стирается**):
+
+```sql
+CREATE DATABASE invoice_keeper_test OWNER invoice;
+```
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Другой адрес: `TEST_DATABASE_URL=postgresql+psycopg://user:pass@host:5432/dbname pytest`.
+Покрыто: расписание периодов, ограничения БД, API и роли, оповещения (в т. ч. гонка параллельных потоков), совпадение моделей с миграциями.
 
 ## Настройки `.env`
 
 | Переменная | Назначение |
 |---|---|
+| `DATABASE_URL` | адрес PostgreSQL, формат `postgresql+psycopg://user:pass@host:5432/db` |
+| `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` | размер пула соединений (по умолчанию 10 + 10) |
+| `AUTO_MIGRATE` | применять миграции при старте (по умолчанию `false`) |
 | `ADMIN_LOGIN`, `ADMIN_PASSWORD` | единственный администратор; создаётся/обновляется при старте |
 | `SECRET_KEY` | ключ подписи JWT |
 | `TIMEZONE` | единый часовой пояс для «сегодня», просрочек и напоминаний (по умолчанию `Europe/Moscow`) |
@@ -101,14 +162,19 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 app/
   main.py           приложение, lifespan, запуск фоновых задач
   config.py         настройки из .env
-  models.py         SQLAlchemy-модели
+  models.py         SQLAlchemy-модели (схема PostgreSQL)
+  db.py             подключение, пул, миграции
   schemas.py        Pydantic-схемы
   payments.py       расписание периодов, просрочка, итоги
   notifications.py  напоминания, команды и кнопки бота
   telegram.py       клиент Telegram Bot API
   routers/          эндпоинты
   seed.py           тестовые данные
-scripts/export_openapi.py  выгрузка docs/openapi.json и docs/openapi.yml
+alembic/            миграции схемы БД
+scripts/export_openapi.py            выгрузка docs/openapi.json и docs/openapi.yml
+scripts/migrate_sqlite_to_postgres.py  перенос данных из старой SQLite-базы
+tests/              pytest (на PostgreSQL)
+docs/DATABASE.md    схема БД, ER-диаграмма, решения
 ```
 
 Обновить OpenAPI-файлы после изменений API:

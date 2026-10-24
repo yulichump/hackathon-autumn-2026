@@ -52,7 +52,7 @@ def payments_budget(
         if occ.status == PaymentStatus.PAID:
             budget[Currency(occ.currency)].paid += occ.amount
 
-    for payment in db.scalars(select(RecurringPayment).where(RecurringPayment.is_deleted.is_(False))):
+    for payment in db.scalars(select(RecurringPayment).where(RecurringPayment.deleted_at.is_(None))):
         index = 0
         while (due := due_date_for(payment.start_date, payment.period, index)) < end:
             if due >= start and (payment.id, due) not in known:
