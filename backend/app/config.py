@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    telegram_api_url: str = "https://api.telegram.org"
+    telegram_proxy: str = ""
     remind_days_before: int = 3
     reminder_check_interval_seconds: int = 60
 

@@ -165,6 +165,61 @@ docker compose up -d web
 
 Caddy сам получит и будет продлевать сертификат Let's Encrypt (для этого нужны открытые порты 80 и 443). HTTP будет перенаправлять на HTTPS.
 
+## 6а. Если Telegram заблокирован (сервер в РФ)
+
+Признак: в `docker compose logs backend` повторяется `Telegram getUpdates failed`, а проверка
+
+```bash
+curl -4 -m 8 -s -o /dev/null -w "%{http_code}\n" https://api.telegram.org
+```
+
+печатает `000`. Бекенд умеет ходить в Telegram через посредника — выберите один из вариантов.
+
+**Вариант 1 — Cloudflare Worker (бесплатно, без второго сервера).**
+
+1. Зарегистрируйтесь на [dash.cloudflare.com](https://dash.cloudflare.com), откройте **Workers & Pages → Create → Create Worker**, задайте имя (например, `tg-relay`) и нажмите **Deploy**.
+2. Нажмите **Edit code**, замените код целиком и снова нажмите **Deploy**:
+
+```js
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (!url.pathname.startsWith('/bot')) {
+      return new Response('Not found', { status: 404 });
+    }
+    url.hostname = 'api.telegram.org';
+    return fetch(new Request(url, request));
+  },
+};
+```
+
+3. Скопируйте адрес воркера вида `https://tg-relay.<аккаунт>.workers.dev` и пропишите в `backend/.env`:
+
+```
+TELEGRAM_API_URL=https://tg-relay.<аккаунт>.workers.dev
+```
+
+Воркер пропускает только запросы Bot API (`/bot...`); без токена бота ими не воспользоваться. Токен при этом проходит через Cloudflare.
+
+**Вариант 2 — свой прокси.** HTTP(S) или SOCKS5 за пределами РФ:
+
+```
+TELEGRAM_PROXY=socks5://user:password@proxy-host:1080
+```
+
+Если у вас есть любой зарубежный сервер с SSH, на нём ничего ставить не нужно: на этом VPS поднимите SOCKS-туннель
+`ssh -N -D 0.0.0.0:1080 user@зарубежный-сервер` (через systemd или autossh) и укажите
+`TELEGRAM_PROXY=socks5://host.docker.internal:1080`. Снаружи порт 1080 закрыт файрволом `ufw`.
+
+После правки `backend/.env`:
+
+```bash
+docker compose up -d backend
+```
+
+В логе бекенда появится строка `Telegram Bot API: ...` с маршрутом, а ошибки `getUpdates failed` пропадут.
+Неотправленные напоминания уйдут на ближайшей проверке — они не теряются.
+
 ## 7. Обновление
 
 ```bash
@@ -213,4 +268,5 @@ crontab -e
 - **502 Bad Gateway** сразу после запуска — бекенд ещё стартует, подождите 20–30 секунд. Если не проходит — `docker compose logs backend`.
 - **`Conflict: terminated by other getUpdates request`** в логах — этим токеном бота пользуется ещё один бекенд. Остановите лишний.
 - **Бот перестал писать в группу** — группа могла стать супергруппой и сменить ID. Бот перейдёт на новый сам и напишет в логе нужный `TELEGRAM_CHAT_ID`; пропишите его в `backend/.env` и выполните `docker compose up -d backend`.
+- **`Telegram getUpdates failed`** без других подробностей — до Telegram нет связи; для серверов в РФ см. раздел 6а.
 - **Нет HTTPS** — проверьте A-запись домена и что порты 80/443 открыты (`ufw status`), затем `docker compose logs web`.

@@ -1,19 +1,35 @@
 """Минимальный клиент Telegram Bot API (long polling) на httpx."""
 
 import logging
+from urllib.parse import urlsplit
 
 import httpx
 
 logger = logging.getLogger("telegram")
 
 NOT_MODIFIED = "message is not modified"
+DEFAULT_API_URL = "https://api.telegram.org"
+
+
+def describe_route(api_url: str, proxy: str) -> str:
+    """Куда реально уходят запросы к Bot API — без логинов и паролей прокси, для логов."""
+    target = urlsplit(api_url).netloc or api_url
+    if not proxy:
+        return target
+    parts = urlsplit(proxy)
+    return f"{target} через прокси {parts.scheme}://{parts.hostname}:{parts.port or ''}".rstrip(":")
 
 
 class TelegramBot:
-    def __init__(self, token: str, chat_id: str):
+    def __init__(self, token: str, chat_id: str, api_url: str = DEFAULT_API_URL, proxy: str = ""):
+        """`api_url` — Bot API или посредник вроде Cloudflare Worker; `proxy` — http(s)/socks5 прокси."""
         self.token = token
         self.chat_id = chat_id
-        self._client = httpx.AsyncClient(base_url=f"https://api.telegram.org/bot{token}/", timeout=40)
+        self._client = httpx.AsyncClient(
+            base_url=f"{(api_url or DEFAULT_API_URL).rstrip('/')}/bot{token}/",
+            proxy=proxy or None,
+            timeout=40,
+        )
 
     @property
     def can_send(self) -> bool:
