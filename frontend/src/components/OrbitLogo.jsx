@@ -75,7 +75,7 @@ export default function OrbitLogo({ size = 44, showName = true }) {
 
       {showName && (
         <div className="orbit-brand__text">
-          <span className="orbit-brand__title">Invoice Keeper</span>
+          <span className="orbit-brand__title">Invoice<span> </span>Keeper</span>
         </div>
       )}
     </div>

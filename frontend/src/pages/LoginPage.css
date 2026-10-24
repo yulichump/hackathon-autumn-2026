@@ -1,0 +1,320 @@
+.login-page {
+  --login-bg: #202226;
+  --login-card: #2d2d2d;
+  --login-border: #41454c;
+  --login-primary: #16b9cf;
+  --login-primary-hover: #55d3e3;
+  --login-text: #f4f7fa;
+  --login-muted: #a7adb7;
+
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 48px 20px 76px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(22 185 207 / 5%), transparent 48%),
+    var(--login-bg);
+  color: var(--login-text);
+}
+
+.login-page__glow {
+  position: absolute;
+  z-index: -1;
+  width: 340px;
+  height: 340px;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.12;
+}
+
+.login-page__glow--top {
+  top: -220px;
+  right: -80px;
+  background: var(--login-primary);
+}
+
+.login-page__glow--bottom {
+  bottom: -250px;
+  left: -120px;
+  background: #1679cf;
+}
+
+.login-card.MuiPaper-root {
+  width: 100%;
+  max-width: 440px;
+  padding: 40px;
+  border: 1px solid var(--login-border);
+  border-radius: 20px;
+  background: rgb(45 45 45 / 94%);
+  color: var(--login-text);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 20%);
+  backdrop-filter: blur(14px);
+}
+
+.login-card__header {
+  margin-bottom: 30px;
+}
+
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 38px;
+}
+
+.login-brand__mark {
+  position: relative;
+  display: flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  overflow: hidden;
+  border: 1px solid rgb(22 185 207 / 40%);
+  border-radius: 12px;
+  background: rgb(22 185 207 / 9%);
+  transform: rotate(-6deg);
+}
+
+.login-brand__mark span {
+  display: block;
+  width: 4px;
+  border-radius: 4px;
+  background: var(--login-primary);
+  transform: skew(-14deg);
+}
+
+.login-brand__mark span:nth-child(1) {
+  height: 12px;
+  opacity: 0.65;
+}
+
+.login-brand__mark span:nth-child(2) {
+  height: 21px;
+}
+
+.login-brand__mark span:nth-child(3) {
+  height: 16px;
+  opacity: 0.8;
+}
+
+.login-brand__name.MuiTypography-root {
+  color: var(--login-text);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.7px;
+}
+
+.login-brand__name span {
+  color: var(--login-primary);
+}
+
+.login-card__eyebrow.MuiTypography-root {
+  margin-bottom: 10px;
+  color: var(--login-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+}
+
+.login-card__title.MuiTypography-root {
+  margin: 0 0 10px;
+  color: var(--login-text);
+  font-size: clamp(27px, 5vw, 32px);
+  font-weight: 650;
+  letter-spacing: -1px;
+  line-height: 1.2;
+}
+
+.login-card__subtitle.MuiTypography-root {
+  max-width: 320px;
+  color: var(--login-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.login-card__error.MuiAlert-root {
+  margin-bottom: 20px;
+  align-items: center;
+  border: 1px solid rgb(244 67 54 / 25%);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-form__field .MuiInputLabel-root {
+  color: var(--login-muted);
+}
+
+.login-form__field .MuiInputLabel-root.Mui-focused {
+  color: var(--login-primary);
+}
+
+.login-form__field .MuiOutlinedInput-root {
+  min-height: 54px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 2%);
+  color: var(--login-text);
+}
+
+.login-form__field .MuiOutlinedInput-notchedOutline {
+  border-color: var(--login-border);
+  transition: border-color 160ms ease;
+}
+
+.login-form__field .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline {
+  border-color: #646b75;
+}
+
+.login-form__field .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-width: 1px;
+  border-color: var(--login-primary);
+}
+
+.login-form__field .MuiOutlinedInput-input {
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+
+.login-form__field .MuiInputBase-input:-webkit-autofill {
+  -webkit-text-fill-color: var(--login-text);
+  box-shadow: 0 0 0 100px var(--login-card) inset;
+  caret-color: var(--login-text);
+}
+
+.login-form__password-toggle.MuiIconButton-root {
+  color: var(--login-muted);
+  transition: color 160ms ease;
+}
+
+.login-form__password-toggle.MuiIconButton-root:hover {
+  color: var(--login-primary-hover);
+  background: rgb(22 185 207 / 8%);
+}
+
+.login-form__submit.MuiButton-root {
+  min-height: 52px;
+  margin-top: 5px;
+  gap: 10px;
+  border-radius: 10px;
+  background: var(--login-primary);
+  color: #102126;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: none;
+  box-shadow: none;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.login-form__submit.MuiButton-root:hover {
+  background: var(--login-primary-hover);
+  box-shadow: 0 7px 22px rgb(22 185 207 / 16%);
+  transform: translateY(-1px);
+}
+
+.login-form__submit.MuiButton-root.Mui-disabled {
+  background: rgb(22 185 207 / 35%);
+  color: rgb(16 33 38 / 65%);
+}
+
+.login-form__spinner.MuiCircularProgress-root {
+  color: currentColor;
+}
+
+.login-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 30px;
+  padding-top: 22px;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+}
+
+.login-card__footer .MuiTypography-root {
+  color: var(--login-muted);
+  font-size: 12px;
+}
+
+.login-card__status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--login-primary);
+  box-shadow: 0 0 10px rgb(22 185 207 / 45%);
+}
+
+.login-page__copyright.MuiTypography-root {
+  position: absolute;
+  right: 16px;
+  bottom: 24px;
+  left: 16px;
+  color: #747b85;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .login-page {
+    align-items: center;
+    padding: 24px 16px 64px;
+  }
+
+  .login-card.MuiPaper-root {
+    max-width: 420px;
+    padding: 28px 22px;
+    border-radius: 16px;
+  }
+
+  .login-card__header {
+    margin-bottom: 26px;
+  }
+
+  .login-brand {
+    margin-bottom: 32px;
+  }
+
+  .login-card__title.MuiTypography-root {
+    font-size: 28px;
+  }
+
+  .login-form {
+    gap: 16px;
+  }
+
+  .login-page__copyright.MuiTypography-root {
+    bottom: 18px;
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-form__field .MuiOutlinedInput-notchedOutline,
+  .login-form__password-toggle.MuiIconButton-root,
+  .login-form__submit.MuiButton-root {
+    transition: none;
+  }
+
+  .login-form__submit.MuiButton-root:hover {
+    transform: none;
+  }
+}
