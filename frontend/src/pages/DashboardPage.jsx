@@ -4,7 +4,7 @@ import {
   Dialog, DialogActions, DialogContent, DialogTitle,
   FormControl, IconButton, InputLabel, MenuItem, Paper,
   Select, Snackbar, Stack, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Typography,
+  TableContainer, TableHead, TableRow, TextField, Typography, ToggleButton, ToggleButtonGroup
 } from '@mui/material';
 
 import { ChevronDown, ChartNoAxesCombined } from 'lucide-react';
@@ -14,7 +14,7 @@ import { getErrorMessage } from '../api/axios';
 import { getOccurrences, getSummary, markPaid, markUnpaid, updateOccurrence } from '../api/payments';
 import { CURRENCIES, formatDate, formatMoney, formatNumber, todayIso } from '../utils/format';
 
-
+import PaymentsCalendar from '../components/PaymentsCalendar';
 
 function SummaryCards({ summary }) {
   const [expanded, setExpanded] = useState(true);
@@ -259,6 +259,8 @@ export default function DashboardPage() {
 
   const [reloadKey, setReloadKey] = useState(0);
 
+  const [viewMode, setViewMode] = useState('list');
+
   useEffect(() => {
     let cancelled = false;
     Promise.all([getOccurrences(filters), getSummary()])
@@ -299,269 +301,326 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Typography variant="h4" sx={{ mb: 3, fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>Платежи</Typography>
 
-      <SummaryCards summary={summary} />
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        justifyContent="space-between"
+        alignItems={{ xs: 'stretch', sm: 'center' }}
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
+        <Typography
+          variant="h4"
+          sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
+        >
+          Платежи
+        </Typography>
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Статус</InputLabel>
-          <Select label="Статус" value={filters.status} onChange={setFilter('status')}>
-            <MenuItem value="">Все</MenuItem>
-            <MenuItem value="unpaid">Не оплачено</MenuItem>
-            <MenuItem value="paid">Оплачено</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Валюта</InputLabel>
-          <Select label="Валюта" value={filters.currency} onChange={setFilter('currency')}>
-            <MenuItem value="">Все</MenuItem>
-            {CURRENCIES.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Просрочка</InputLabel>
-          <Select label="Просрочка" value={filters.is_overdue} onChange={setFilter('is_overdue')}>
-            <MenuItem value="">Все</MenuItem>
-            <MenuItem value="true">Просроченные</MenuItem>
-            <MenuItem value="false">Без просрочки</MenuItem>
-          </Select>
-        </FormControl>
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={(_, value) => {
+            if (value) setViewMode(value);
+          }}
+          size="small"
+          aria-label="Представление платежей"
+          sx={{
+            alignSelf: { xs: 'flex-start', sm: 'auto' },
+            backgroundColor: 'background.paper',
+            borderRadius: 2,
+            '& .MuiToggleButton-root': {
+              px: 2,
+              py: 1,
+              borderColor: 'divider',
+              textTransform: 'none',
+              fontWeight: 600,
+            },
+            '& .MuiToggleButton-root.Mui-selected': {
+              color: 'primary.main',
+              backgroundColor: 'rgba(22, 185, 207, 0.12)',
+              borderColor: 'rgba(22, 185, 207, 0.4)',
+            },
+            '& .MuiToggleButton-root.Mui-selected:hover': {
+              backgroundColor: 'rgba(22, 185, 207, 0.2)',
+            },
+          }}
+        >
+          <ToggleButton value="list">☷ Список</ToggleButton>
+          <ToggleButton value="calendar">▦ Календарь</ToggleButton>
+        </ToggleButtonGroup>
       </Stack>
 
+      {viewMode === 'list' && (
+        <>
+          <SummaryCards summary={summary} />
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: 'minmax(0, 1fr)',
-            md: 'repeat(2, minmax(0, 1fr))',
-            xl: 'repeat(3, minmax(0, 1fr))',
-          },
-          gap: 2,
-          alignItems: 'stretch',
-        }}
-      >
-        {!loading && occurrences.length === 0 && (
-          <Paper
-            sx={{
-              gridColumn: '1 / -1',
-              p: 5,
-              textAlign: 'center',
-              border: '1px dashed',
-              borderColor: 'divider',
-            }}
-          >
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Платежей нет
-            </Typography>
-            <Typography color="text.secondary" variant="body2">
-              Попробуй изменить фильтры или проверь позже.
-            </Typography>
-          </Paper>
-        )}
-
-        {loading && occurrences.length === 0 && (
-          <Paper
-            sx={{
-              gridColumn: '1 / -1',
-              p: 4,
-              textAlign: 'center',
-            }}
-          >
-            <Typography color="text.secondary">
-              Загружаем платежи...
-            </Typography>
-          </Paper>
-        )}
-
-        {occurrences.map((p) => {
-          const paid = p.status === 'paid';
-          const overdue = p.is_overdue && !paid;
-
-          return (
-            <Card
-              key={p.id}
-              variant="outlined"
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel>Статус</InputLabel>
+              <Select label="Статус" value={filters.status} onChange={setFilter('status')}>
+                <MenuItem value="">Все</MenuItem>
+                <MenuItem value="unpaid">Не оплачено</MenuItem>
+                <MenuItem value="paid">Оплачено</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel>Валюта</InputLabel>
+              <Select label="Валюта" value={filters.currency} onChange={setFilter('currency')}>
+                <MenuItem value="">Все</MenuItem>
+                {CURRENCIES.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel>Просрочка</InputLabel>
+              <Select label="Просрочка" value={filters.is_overdue} onChange={setFilter('is_overdue')}>
+                <MenuItem value="">Все</MenuItem>
+                <MenuItem value="true">Просроченные</MenuItem>
+                <MenuItem value="false">Без просрочки</MenuItem>
+              </Select>
+            </FormControl>
+          </Stack>
+        </>
+      )}
+      {viewMode === 'calendar' ? (
+        <PaymentsCalendar
+          occurrences={occurrences}
+          loading={loading}
+          onPay={(payment) => setDialogFor(payment)}
+          onUnpaid={(payment) => runAction(() => markUnpaid(payment.id))}
+        />
+      ) : (
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              md: 'repeat(2, minmax(0, 1fr))',
+              xl: 'repeat(3, minmax(0, 1fr))',
+            },
+            gap: 2,
+            alignItems: 'stretch',
+          }}
+        >
+          {!loading && occurrences.length === 0 && (
+            <Paper
               sx={{
-                minWidth: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                borderColor: overdue ? 'error.main' : 'divider',
-                borderRadius: 3,
-                backgroundColor: 'background.paper',
-                transition: 'border-color 0.2s, transform 0.2s',
-                '&:hover': {
-                  borderColor: overdue ? 'error.light' : 'primary.main',
-                  transform: 'translateY(-2px)',
-                },
+                gridColumn: '1 / -1',
+                p: 5,
+                textAlign: 'center',
+                border: '1px dashed',
+                borderColor: 'divider',
               }}
             >
-              <CardContent
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Платежей нет
+              </Typography>
+              <Typography color="text.secondary" variant="body2">
+                Попробуй изменить фильтры или проверь позже.
+              </Typography>
+            </Paper>
+          )}
+
+          {loading && occurrences.length === 0 && (
+            <Paper
+              sx={{
+                gridColumn: '1 / -1',
+                p: 4,
+                textAlign: 'center',
+              }}
+            >
+              <Typography color="text.secondary">
+                Загружаем платежи...
+              </Typography>
+            </Paper>
+          )}
+
+          {occurrences.map((p) => {
+            const paid = p.status === 'paid';
+            const overdue = p.is_overdue && !paid;
+
+            return (
+              <Card
+                key={p.id}
+                variant="outlined"
                 sx={{
-                  p: 2.5,
+                  minWidth: 0,
                   display: 'flex',
                   flexDirection: 'column',
-                  flexGrow: 1,
-                  '&:last-child': { pb: 2.5 },
+                  borderColor: overdue ? 'error.main' : 'divider',
+                  borderRadius: 3,
+                  backgroundColor: 'background.paper',
+                  transition: 'border-color 0.2s, transform 0.2s',
+                  '&:hover': {
+                    borderColor: overdue ? 'error.light' : 'primary.main',
+                    transform: 'translateY(-2px)',
+                  },
                 }}
               >
-                {/* Название и статус */}
-                <Stack
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="flex-start"
-                  spacing={1}
-                  sx={{ mb: 2 }}
-                >
-                  <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography
-                      variant="h6"
-                      sx={{
-                        fontSize: '1rem',
-                        overflowWrap: 'anywhere',
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {p.name}
-                    </Typography>
-
-                    {p.recurring_payment_is_deleted && (
-                      <Chip
-                        size="small"
-                        label="Платёж прекращён"
-                        sx={{ mt: 1, maxWidth: '100%' }}
-                      />
-                    )}
-                  </Box>
-
-                  <Chip
-                    size="small"
-                    label={paid ? 'Оплачено' : 'Ожидает оплаты'}
-                    color={paid ? 'success' : 'default'}
-                    sx={{ flexShrink: 0, maxWidth: '55%' }}
-                  />
-                </Stack>
-
-                {/* Сумма */}
-                <Typography
-                  variant="h5"
+                <CardContent
                   sx={{
-                    color: paid ? 'success.main' : 'text.primary',
-                    fontWeight: 700,
-                    mb: 2.5,
-                    overflowWrap: 'anywhere',
+                    p: 2.5,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flexGrow: 1,
+                    '&:last-child': { pb: 2.5 },
                   }}
                 >
-                  {formatMoney(p.amount, p.currency)}
-                </Typography>
-
-                {/* Основная информация */}
-                <Stack spacing={1.5} sx={{ mb: 2.5 }}>
-                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                    <Box sx={{ color: 'text.secondary', pt: 0.2 }}>
-                      <span>◷</span>
-                    </Box>
+                  {/* Название и статус */}
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="flex-start"
+                    spacing={1}
+                    sx={{ mb: 2 }}
+                  >
                     <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Срок оплаты
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {formatDate(p.due_date)}
-                      </Typography>
-                    </Box>
-                  </Stack>
-
-                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                    <Box sx={{ color: 'text.secondary', pt: 0.2 }}>
-                      <span>✓</span>
-                    </Box>
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Дата оплаты
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {formatDate(p.actual_payment_date)}
-                      </Typography>
-                    </Box>
-                  </Stack>
-
-                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                    <Box sx={{ color: 'text.secondary', pt: 0.2 }}>
-                      <span>◎</span>
-                    </Box>
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Отметил оплату
-                      </Typography>
                       <Typography
-                        variant="body2"
-                        sx={{ overflowWrap: 'anywhere' }}
+                        variant="h6"
+                        sx={{
+                          fontSize: '1rem',
+                          overflowWrap: 'anywhere',
+                          lineHeight: 1.5,
+                        }}
                       >
-                        {p.paid_by
-                          ? p.paid_by.startsWith('@')
-                            ? `${p.paid_by} (Telegram)`
-                            : p.paid_by
-                          : 'Не указано'}
+                        {p.name}
                       </Typography>
-                    </Box>
-                  </Stack>
-                </Stack>
 
-                {/* Просрочка */}
-                {overdue && (
-                  <Box sx={{ mb: 2 }}>
+                      {p.recurring_payment_is_deleted && (
+                        <Chip
+                          size="small"
+                          label="Платёж прекращён"
+                          sx={{ mt: 1, maxWidth: '100%' }}
+                        />
+                      )}
+                    </Box>
+
                     <Chip
                       size="small"
-                      color="error"
-                      label={`Просрочено на ${p.days_overdue} дн.`}
+                      label={paid ? 'Оплачено' : 'Ожидает оплаты'}
+                      color={paid ? 'success' : 'default'}
+                      sx={{ flexShrink: 0, maxWidth: '55%' }}
                     />
-                  </Box>
-                )}
+                  </Stack>
 
-                {/* Действия */}
-                <Box sx={{ mt: 'auto', pt: 2, borderTop: 1, borderColor: 'divider' }}>
-                  {paid ? (
-                    <Stack
-                      direction={{ xs: 'column', sm: 'row' }}
-                      spacing={1}
-                    >
+                  {/* Сумма */}
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      color: paid ? 'success.main' : 'text.primary',
+                      fontWeight: 700,
+                      mb: 2.5,
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {formatMoney(p.amount, p.currency)}
+                  </Typography>
+
+                  {/* Основная информация */}
+                  <Stack spacing={1.5} sx={{ mb: 2.5 }}>
+                    <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                      <Box sx={{ color: 'text.secondary', pt: 0.2 }}>
+                        <span>◷</span>
+                      </Box>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Срок оплаты
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {formatDate(p.due_date)}
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                      <Box sx={{ color: 'text.secondary', pt: 0.2 }}>
+                        <span>✓</span>
+                      </Box>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Дата оплаты
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {formatDate(p.actual_payment_date)}
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                      <Box sx={{ color: 'text.secondary', pt: 0.2 }}>
+                        <span>◎</span>
+                      </Box>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Отметил оплату
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ overflowWrap: 'anywhere' }}
+                        >
+                          {p.paid_by
+                            ? p.paid_by.startsWith('@')
+                              ? `${p.paid_by} (Telegram)`
+                              : p.paid_by
+                            : 'Не указано'}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Stack>
+
+                  {/* Просрочка */}
+                  {overdue && (
+                    <Box sx={{ mb: 2 }}>
+                      <Chip
+                        size="small"
+                        color="error"
+                        label={`Просрочено на ${p.days_overdue} дн.`}
+                      />
+                    </Box>
+                  )}
+
+                  {/* Действия */}
+                  <Box sx={{ mt: 'auto', pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                    {paid ? (
+                      <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        spacing={1}
+                      >
+                        <Button
+                          fullWidth
+                          size="medium"
+                          variant="outlined"
+                          onClick={() => setDialogFor(p)}
+                        >
+                          Изменить дату
+                        </Button>
+
+                        <Button
+                          fullWidth
+                          size="medium"
+                          color="inherit"
+                          onClick={() => runAction(() => markUnpaid(p.id))}
+                        >
+                          Отменить оплату
+                        </Button>
+                      </Stack>
+                    ) : (
                       <Button
                         fullWidth
-                        size="medium"
-                        variant="outlined"
+                        size="large"
+                        variant="contained"
                         onClick={() => setDialogFor(p)}
                       >
-                        Изменить дату
+                        <span style={{ marginRight: 8 }}>✓</span>
+                        Отметить оплату
                       </Button>
-
-                      <Button
-                        fullWidth
-                        size="medium"
-                        color="inherit"
-                        onClick={() => runAction(() => markUnpaid(p.id))}
-                      >
-                        Отменить оплату
-                      </Button>
-                    </Stack>
-                  ) : (
-                    <Button
-                      fullWidth
-                      size="large"
-                      variant="contained"
-                      onClick={() => setDialogFor(p)}
-                    >
-                      <span style={{ marginRight: 8 }}>✓</span>
-                      Отметить оплату
-                    </Button>
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </Box>
-
+                    )}
+                  </Box>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Box>
+      )}
 
       {dialogFor && (
         <PayDialog occurrence={dialogFor} onClose={() => setDialogFor(null)} onSubmit={handlePaySubmit} />

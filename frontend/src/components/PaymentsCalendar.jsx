@@ -7,12 +7,15 @@ import {
     Card,
     CardContent,
     Chip,
+    Collapse,
     Dialog,
     DialogContent,
     DialogTitle,
     IconButton,
     Stack,
     Typography,
+    ToggleButton,
+    ToggleButtonGroup,
 } from '@mui/material';
 import { formatDate, formatMoney } from '../utils/format';
 import './PaymentsCalendar.css';
@@ -348,39 +351,6 @@ export default function PaymentsCalendar({
                             >
                                 Платежи
                             </Typography>
-
-                            <ToggleButtonGroup
-                                value={viewMode}
-                                exclusive
-                                onChange={(_, value) => {
-                                    if (value) setViewMode(value);
-                                }}
-                                size="small"
-                                aria-label="Представление платежей"
-                                sx={{
-                                    alignSelf: { xs: 'flex-start', sm: 'auto' },
-                                    backgroundColor: 'background.paper',
-                                    borderRadius: 2,
-                                    '& .MuiToggleButton-root': {
-                                        px: 2,
-                                        py: 1,
-                                        borderColor: 'divider',
-                                        textTransform: 'none',
-                                        fontWeight: 600,
-                                    },
-                                    '& .MuiToggleButton-root.Mui-selected': {
-                                        color: 'primary.main',
-                                        backgroundColor: 'rgba(22, 185, 207, 0.12)',
-                                        borderColor: 'rgba(22, 185, 207, 0.4)',
-                                    },
-                                    '& .MuiToggleButton-root.Mui-selected:hover': {
-                                        backgroundColor: 'rgba(22, 185, 207, 0.2)',
-                                    },
-                                }}
-                            >
-                                <ToggleButton value="list">☷ Список</ToggleButton>
-                                <ToggleButton value="calendar">▦ Календарь</ToggleButton>
-                            </ToggleButtonGroup>
                         </Stack>
 
                         <Typography variant="body2" color="text.secondary">
