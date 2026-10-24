@@ -1,5 +1,8 @@
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
-import { CssBaseline } from '@mui/material';
+import { CssBaseline, ThemeProvider } from '@mui/material';
+
+import theme from './theme.js';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
@@ -10,33 +13,49 @@ import UsersPage from './pages/UsersPage';
 
 function App() {
   return (
-    <AuthProvider>
+    <ThemeProvider theme={theme}>
       <CssBaseline />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/recurring" element={<RecurringPaymentsPage />} />
+
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+
             <Route
-              path="/users"
               element={
-                <ProtectedRoute adminOnly>
-                  <UsersPage />
+                <ProtectedRoute>
+                  <Layout />
                 </ProtectedRoute>
               }
+            >
+              <Route
+                path="/dashboard"
+                element={<DashboardPage />}
+              />
+
+              <Route
+                path="/recurring"
+                element={<RecurringPaymentsPage />}
+              />
+
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute adminOnly>
+                    <UsersPage />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
+
+            <Route
+              path="*"
+              element={<Navigate to="/dashboard" replace />}
             />
-          </Route>
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

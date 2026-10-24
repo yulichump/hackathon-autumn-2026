@@ -1,29 +1,94 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Paper,
-  Snackbar, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  MenuItem,
+  Snackbar,
+  Stack,
+  Switch,
+  TextField,
+  Typography,
 } from '@mui/material';
 import { useAuth } from '../context/useAuth';
 import { getErrorMessage } from '../api/axios';
-import { createRecurringPayment, deleteRecurringPayment, getRecurringPayments } from '../api/payments';
+import {
+  createRecurringPayment,
+  deleteRecurringPayment,
+  getRecurringPayments,
+} from '../api/payments';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { CURRENCIES, PERIODS, formatDate, formatNumber, periodLabel, todayIso } from '../utils/format';
+import {
+  CURRENCIES,
+  PERIODS,
+  formatDate,
+  formatNumber,
+  periodLabel,
+  todayIso,
+} from '../utils/format';
 
-const EMPTY_FORM = { name: '', amount: '', currency: 'RUB', next_payment_date: todayIso(), period: 'monthly' };
+const EMPTY_FORM = {
+  name: '',
+  amount: '',
+  currency: 'RUB',
+  next_payment_date: todayIso(),
+  period: 'monthly',
+};
+
+function InfoItem({ label, value }) {
+  return (
+    <Box
+      sx={{
+        minWidth: 0,
+        p: 1.5,
+        borderRadius: 2,
+        bgcolor: 'rgba(255,255,255,0.035)',
+      }}
+    >
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: 'block', mb: 0.5 }}
+      >
+        {label}
+      </Typography>
+      <Typography
+        variant="body2"
+        fontWeight={600}
+        sx={{ overflowWrap: 'anywhere' }}
+      >
+        {value || '—'}
+      </Typography>
+    </Box>
+  );
+}
 
 function CreatePaymentDialog({ onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const setField = (name) => (e) => setForm((prev) => ({ ...prev, [name]: e.target.value }));
+  const setField = (name) => (e) =>
+    setForm((prev) => ({ ...prev, [name]: e.target.value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSaving(true);
+
     try {
-      const created = await createRecurringPayment({ ...form, amount: Number(form.amount) });
+      const created = await createRecurringPayment({
+        ...form,
+        amount: Number(form.amount),
+      });
       onCreated(created);
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось создать платёж'));
@@ -32,49 +97,233 @@ function CreatePaymentDialog({ onClose, onCreated }) {
   };
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
       <form onSubmit={handleSubmit}>
-        <DialogTitle>Новый регулярный платёж</DialogTitle>
+        <DialogTitle sx={{ pb: 1 }}>
+          Новый регулярный платёж
+        </DialogTitle>
+
         <DialogContent>
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField label="Название" required autoFocus value={form.name} onChange={setField('name')} />
-            <Stack direction="row" spacing={2}>
+            <TextField
+              label="Название"
+              required
+              autoFocus
+              fullWidth
+              value={form.name}
+              onChange={setField('name')}
+            />
+
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={2}
+            >
               <TextField
                 label="Сумма"
                 required
                 type="number"
                 value={form.amount}
                 onChange={setField('amount')}
-                sx={{ flex: 1 }}
-                slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
+                fullWidth
+                slotProps={{
+                  htmlInput: { min: 0.01, step: 0.01 },
+                }}
               />
-              <TextField select label="Валюта" value={form.currency} onChange={setField('currency')} sx={{ width: 120 }}>
-                {CURRENCIES.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-              </TextField>
-            </Stack>
-            <Stack direction="row" spacing={2}>
+
               <TextField
-                label="Дата ближайшей оплаты"
-                required
-                type="date"
-                value={form.next_payment_date}
-                onChange={setField('next_payment_date')}
-                sx={{ flex: 1 }}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <TextField select label="Периодичность" value={form.period} onChange={setField('period')} sx={{ flex: 1 }}>
-                {PERIODS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                select
+                label="Валюта"
+                value={form.currency}
+                onChange={setField('currency')}
+                fullWidth
+                sx={{ minWidth: 0 }}
+              >
+                {CURRENCIES.map((currency) => (
+                  <MenuItem key={currency} value={currency}>
+                    {currency}
+                  </MenuItem>
+                ))}
               </TextField>
             </Stack>
+
+            <TextField
+              label="Дата ближайшей оплаты"
+              required
+              type="date"
+              value={form.next_payment_date}
+              onChange={setField('next_payment_date')}
+              fullWidth
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+
+            <TextField
+              select
+              label="Периодичность"
+              value={form.period}
+              onChange={setField('period')}
+              fullWidth
+            >
+              {PERIODS.map((period) => (
+                <MenuItem key={period.value} value={period.value}>
+                  {period.label}
+                </MenuItem>
+              ))}
+            </TextField>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose}>Отмена</Button>
-          <Button type="submit" variant="contained" disabled={saving}>Создать</Button>
+
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 2.5,
+            flexDirection: { xs: 'column-reverse', sm: 'row' },
+            '& > :not(style) ~ :not(style)': { ml: { xs: 0, sm: 1 } },
+            gap: 1,
+          }}
+        >
+          <Button
+            onClick={onClose}
+            disabled={saving}
+            fullWidth
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+          >
+            Отмена
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={saving}
+            fullWidth
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+          >
+            {saving ? 'Создание…' : 'Создать платёж'}
+          </Button>
         </DialogActions>
       </form>
     </Dialog>
+  );
+}
+
+function RecurringPaymentCard({ payment, isAdmin, onDelete }) {
+  const isDeleted = payment.is_deleted;
+
+  return (
+    <Card
+      sx={{
+        height: '100%',
+        opacity: isDeleted ? 0.72 : 1,
+        transition: 'border-color 0.2s ease, transform 0.2s ease',
+        '&:hover': {
+          borderColor: isDeleted ? 'divider' : 'primary.main',
+          transform: { sm: 'translateY(-2px)' },
+        },
+      }}
+    >
+      <CardContent
+        sx={{
+          p: { xs: 2, sm: 2.5 },
+          '&:last-child': { pb: { xs: 2, sm: 2.5 } },
+        }}
+      >
+        <Stack spacing={2}>
+          <Stack
+            direction="row"
+            alignItems="flex-start"
+            justifyContent="space-between"
+            spacing={1.5}
+          >
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography
+                variant="h6"
+                sx={{
+                  fontSize: '1.05rem',
+                  lineHeight: 1.4,
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {payment.name}
+              </Typography>
+
+              <Chip
+                size="small"
+                label={isDeleted ? 'Прекращён' : 'Активен'}
+                color={isDeleted ? 'default' : 'success'}
+                variant={isDeleted ? 'outlined' : 'filled'}
+                sx={{ mt: 1 }}
+              />
+            </Box>
+
+            <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+              <Typography
+                variant="h5"
+                color={isDeleted ? 'text.secondary' : 'primary.main'}
+                sx={{
+                  fontWeight: 700,
+                  fontSize: { xs: '1.25rem', sm: '1.4rem' },
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {formatNumber(payment.amount)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {payment.currency}
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, minmax(0, 1fr))',
+              },
+              gap: 1,
+            }}
+          >
+            <InfoItem
+              label="Периодичность"
+              value={periodLabel(payment.period)}
+            />
+            <InfoItem
+              label="Ближайшая оплата"
+              value={formatDate(payment.next_payment_date)}
+            />
+            <InfoItem
+              label="Дата начала"
+              value={formatDate(payment.start_date)}
+            />
+          </Box>
+
+          {isAdmin && !isDeleted && (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                pt: 0.5,
+                borderTop: 1,
+                borderColor: 'divider',
+              }}
+            >
+              <Button
+                color="error"
+                variant="outlined"
+                onClick={() => onDelete(payment)}
+                sx={{ mt: 1, width: { xs: '100%', sm: 'auto' } }}
+              >
+                Прекратить платёж
+              </Button>
+            </Box>
+          )}
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -89,106 +338,200 @@ export default function RecurringPaymentsPage() {
 
   useEffect(() => {
     let cancelled = false;
+
     getRecurringPayments({ include_deleted: showDeleted })
       .then((items) => {
         if (!cancelled) setPayments(items);
       })
       .catch((err) => {
-        if (!cancelled) setMessage({ severity: 'error', text: getErrorMessage(err, 'Не удалось загрузить платежи') });
+        if (!cancelled) {
+          setMessage({
+            severity: 'error',
+            text: getErrorMessage(err, 'Не удалось загрузить платежи'),
+          });
+        }
       });
+
     return () => {
       cancelled = true;
     };
   }, [showDeleted, reloadKey]);
 
-  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+  const reload = useCallback(() => {
+    setReloadKey((key) => key + 1);
+  }, []);
 
   const handleCreated = (created) => {
     setCreating(false);
-    setMessage({ severity: 'success', text: `Платёж «${created.name}» добавлен` });
+    setMessage({
+      severity: 'success',
+      text: `Платёж «${created.name}» добавлен`,
+    });
     reload();
   };
 
   const handleDelete = async () => {
     const payment = toDelete;
+    if (!payment) return;
+
     setToDelete(null);
+
     try {
       await deleteRecurringPayment(payment.id);
-      setMessage({ severity: 'success', text: `Платёж «${payment.name}» прекращён, история сохранена` });
+      setMessage({
+        severity: 'success',
+        text: `Платёж «${payment.name}» прекращён, история сохранена`,
+      });
       reload();
     } catch (err) {
-      setMessage({ severity: 'error', text: getErrorMessage(err, 'Не удалось удалить платёж') });
+      setMessage({
+        severity: 'error',
+        text: getErrorMessage(err, 'Не удалось удалить платёж'),
+      });
     }
   };
 
   return (
     <>
-      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-        <Typography variant="h4" sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>Регулярные платежи</Typography>
-        <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        sx={{
+          alignItems: { xs: 'stretch', sm: 'center' },
+          justifyContent: 'space-between',
+          mb: 3,
+          gap: 2,
+        }}
+      >
+        <Box>
+          <Typography
+            variant="h4"
+            sx={{
+              fontSize: { xs: '1.65rem', sm: '2.125rem' },
+              mb: 0.5,
+            }}
+          >
+            Регулярные платежи
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Управление повторяющимися расходами
+          </Typography>
+        </Box>
+
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          sx={{
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 1.5,
+          }}
+        >
           <FormControlLabel
-            control={<Switch checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />}
+            sx={{ mr: 0 }}
+            control={
+              <Switch
+                checked={showDeleted}
+                onChange={(e) => setShowDeleted(e.target.checked)}
+              />
+            }
             label="Показать прекращённые"
           />
-          {isAdmin && <Button variant="contained" onClick={() => setCreating(true)}>Добавить платёж</Button>}
+
+          {isAdmin && (
+            <Button
+              variant="contained"
+              onClick={() => setCreating(true)}
+              sx={{ minHeight: 42 }}
+            >
+              Добавить платёж
+            </Button>
+          )}
         </Stack>
       </Stack>
 
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Название</TableCell>
-              <TableCell align="right">Сумма</TableCell>
-              <TableCell>Валюта</TableCell>
-              <TableCell>Периодичность</TableCell>
-              <TableCell>Ближайшая оплата</TableCell>
-              <TableCell>Начало</TableCell>
-              {isAdmin && <TableCell align="right">Действия</TableCell>}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {payments.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={isAdmin ? 7 : 6} align="center">Регулярных платежей нет</TableCell>
-              </TableRow>
-            )}
-            {payments.map((p) => (
-              <TableRow key={p.id} sx={p.is_deleted ? { opacity: 0.6 } : undefined}>
-                <TableCell>
-                  {p.name}
-                  {p.is_deleted && <Chip size="small" label="прекращён" sx={{ ml: 1 }} />}
-                </TableCell>
-                <TableCell align="right">{formatNumber(p.amount)}</TableCell>
-                <TableCell>{p.currency}</TableCell>
-                <TableCell>{periodLabel(p.period)}</TableCell>
-                <TableCell>{formatDate(p.next_payment_date)}</TableCell>
-                <TableCell>{formatDate(p.start_date)}</TableCell>
-                {isAdmin && (
-                  <TableCell align="right">
-                    {!p.is_deleted && (
-                      <Button size="small" color="error" onClick={() => setToDelete(p)}>Удалить</Button>
-                    )}
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {payments.length === 0 ? (
+        <Card>
+          <CardContent sx={{ py: 5, textAlign: 'center' }}>
+            <Typography variant="h6" sx={{ mb: 1 }}>
+              {showDeleted
+                ? 'Платежей не найдено'
+                : 'Регулярных платежей пока нет'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {showDeleted
+                ? 'Попробуйте изменить настройки отображения.'
+                : isAdmin
+                  ? 'Добавьте регулярный платёж, чтобы он появился здесь.'
+                  : 'Когда регулярные платежи будут добавлены, они появятся здесь.'}
+            </Typography>
 
-      {creating && <CreatePaymentDialog onClose={() => setCreating(false)} onCreated={handleCreated} />}
+            {isAdmin && !showDeleted && (
+              <Button
+                variant="contained"
+                onClick={() => setCreating(true)}
+                sx={{ mt: 2 }}
+              >
+                Добавить первый платёж
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              md: 'repeat(2, minmax(0, 1fr))',
+              xl: 'repeat(3, minmax(0, 1fr))',
+            },
+            gap: { xs: 1.5, sm: 2 },
+            alignItems: 'stretch',
+          }}
+        >
+          {payments.map((payment) => (
+            <RecurringPaymentCard
+              key={payment.id}
+              payment={payment}
+              isAdmin={isAdmin}
+              onDelete={setToDelete}
+            />
+          ))}
+        </Box>
+      )}
+
+      {creating && (
+        <CreatePaymentDialog
+          onClose={() => setCreating(false)}
+          onCreated={handleCreated}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(toDelete)}
         title="Прекратить регулярный платёж?"
-        text={toDelete ? `«${toDelete.name}» больше не будет создавать периоды и напоминания. Прошлые оплаты останутся в истории.` : ''}
+        text={
+          toDelete
+            ? `«${toDelete.name}» больше не будет создавать периоды и напоминания. Прошлые оплаты останутся в истории.`
+            : ''
+        }
         onConfirm={handleDelete}
         onClose={() => setToDelete(null)}
       />
 
-      <Snackbar open={Boolean(message)} autoHideDuration={5000} onClose={() => setMessage(null)}>
-        {message ? <Alert severity={message.severity} onClose={() => setMessage(null)}>{message.text}</Alert> : <span />}
+      <Snackbar
+        open={Boolean(message)}
+        autoHideDuration={5000}
+        onClose={() => setMessage(null)}
+      >
+        {message ? (
+          <Alert
+            severity={message.severity}
+            onClose={() => setMessage(null)}
+          >
+            {message.text}
+          </Alert>
+        ) : (
+          <span />
+        )}
       </Snackbar>
     </>
   );
