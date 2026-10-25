@@ -80,6 +80,33 @@ class RecurringPaymentCreate(BaseModel):
         return v
 
 
+class RecurringPaymentUpdate(BaseModel):
+    """Любое подмножество полей. Изменения применяются к будущим неоплаченным периодам, история не меняется."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    amount: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    currency: Currency | None = None
+    next_payment_date: date | None = Field(
+        default=None, description="Новая дата ближайшей оплаты: расписание продолжится с неё"
+    )
+    period: Period | None = None
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency(cls, v):
+        return v.upper().strip() if isinstance(v, str) else v
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("Название не может быть пустым")
+        return v
+
+
 class RecurringPaymentOut(BaseModel):
     id: int
     name: str

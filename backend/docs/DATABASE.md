@@ -33,6 +33,7 @@ erDiagram
         currency_code currency "RUB | USD | EUR"
         date start_date
         payment_period period
+        int schedule_anchor_index "с какого периода действует start_date"
         timestamptz deleted_at "NULL = активен"
         int created_by_id FK
     }

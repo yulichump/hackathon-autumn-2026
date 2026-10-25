@@ -5,13 +5,14 @@ from collections.abc import Iterable
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import and_, case, func, or_, select, text
+from sqlalchemy import and_, case, delete, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from .config import local_today
 from .models import Currency, NotificationKind, PaymentOccurrence, PaymentStatus, Period, RecurringPayment
 
 MAX_NEW_OCCURRENCES_PER_RUN = 400
+MAX_RESTORE_STEPS = 20_000
 
 # Ключ advisory-блокировки PostgreSQL: генерацию периодов одновременно ведёт только один процесс/поток.
 _GENERATION_LOCK_KEY = 7_201_926
@@ -39,6 +40,15 @@ def due_date_for(start: date, period: str, index: int) -> date:
         case Period.YEARLY:
             return add_months(start, 12 * index)
     raise ValueError(f"Unknown period: {period}")
+
+
+def scheduled_due_date(payment: RecurringPayment, index: int) -> date:
+    """Срок периода с номером `index` по текущему расписанию.
+
+    После изменения даты или периодичности расписание начинается заново с `start_date`
+    у периода номер `schedule_anchor_index`; номера более ранних периодов (история) не меняются.
+    """
+    return due_date_for(payment.start_date, payment.period, index - payment.schedule_anchor_index)
 
 
 def is_overdue(occ: PaymentOccurrence, today: date | None = None) -> bool:
@@ -94,7 +104,7 @@ def ensure_occurrences(db: Session, payments: Iterable[RecurringPayment] | None 
             last = PaymentOccurrence(
                 recurring_payment_id=payment.id,
                 period_index=index,
-                due_date=due_date_for(payment.start_date, payment.period, index),
+                due_date=scheduled_due_date(payment, index),
                 amount=payment.amount,
                 currency=payment.currency,
                 status=PaymentStatus.UNPAID,
@@ -126,7 +136,139 @@ def next_payment_date(db: Session, payment: RecurringPayment) -> date | None:
         .order_by(PaymentOccurrence.period_index.desc())
         .limit(1)
     )
-    return due_date_for(payment.start_date, payment.period, 0 if last_index is None else last_index + 1)
+    return scheduled_due_date(payment, payment.schedule_anchor_index if last_index is None else last_index + 1)
+
+
+class ScheduleConflictError(ValueError):
+    """Новое расписание пересекается с уже сохранёнными периодами."""
+
+    def __init__(self, last_kept: date):
+        super().__init__(last_kept)
+        self.last_kept = last_kept
+
+
+def _last_occurrence(db: Session, payment: RecurringPayment) -> PaymentOccurrence | None:
+    return db.scalar(
+        select(PaymentOccurrence)
+        .where(PaymentOccurrence.recurring_payment_id == payment.id)
+        .order_by(PaymentOccurrence.period_index.desc())
+        .limit(1)
+    )
+
+
+def _upcoming_unpaid_date(db: Session, payment: RecurringPayment, today: date) -> date | None:
+    return db.scalar(
+        select(func.min(PaymentOccurrence.due_date)).where(
+            PaymentOccurrence.recurring_payment_id == payment.id,
+            PaymentOccurrence.status == PaymentStatus.UNPAID,
+            PaymentOccurrence.due_date >= today,
+        )
+    )
+
+
+def _future_unpaid(payment: RecurringPayment, today: date):
+    return and_(
+        PaymentOccurrence.recurring_payment_id == payment.id,
+        PaymentOccurrence.status == PaymentStatus.UNPAID,
+        PaymentOccurrence.due_date >= today,
+    )
+
+
+def update_payment(
+    db: Session,
+    payment: RecurringPayment,
+    *,
+    name: str | None = None,
+    amount: Decimal | None = None,
+    currency: Currency | None = None,
+    period: Period | None = None,
+    next_payment_date: date | None = None,
+) -> dict:
+    """Меняет шаблон платежа. Возвращает изменённые поля {поле: [было, стало]}; коммит — за вызывающим.
+
+    Затрагиваются только будущие неоплаченные периоды (срок сегодня и позже): прошлые, просроченные
+    и оплаченные остаются как были. Смена даты или периодичности пересоздаёт будущие периоды по
+    новому расписанию; дата должна быть позже последнего сохранённого периода.
+    """
+    today = local_today()
+    changes: dict = {}
+
+    if name is not None and name != payment.name:
+        changes["name"] = [payment.name, name]
+        payment.name = name
+
+    current_next = _upcoming_unpaid_date(db, payment, today) or next_payment_date_for_schedule(db, payment)
+    new_period = period if period is not None else payment.period
+    new_start = next_payment_date if next_payment_date is not None else current_next
+    if new_period != payment.period or new_start != current_next:
+        db.execute(delete(PaymentOccurrence).where(_future_unpaid(payment, today)))
+        last = _last_occurrence(db, payment)
+        if last is not None and new_start <= last.due_date:
+            raise ScheduleConflictError(last.due_date)
+        if new_period != payment.period:
+            changes["period"] = [payment.period, new_period]
+        if new_start != current_next:
+            changes["next_payment_date"] = [current_next, new_start]
+        payment.period = new_period
+        payment.start_date = new_start
+        payment.schedule_anchor_index = 0 if last is None else last.period_index + 1
+
+    new_amount = amount if amount is not None else payment.amount
+    new_currency = currency if currency is not None else payment.currency
+    if new_amount != payment.amount or new_currency != payment.currency:
+        if new_amount != payment.amount:
+            changes["amount"] = [payment.amount, new_amount]
+        if new_currency != payment.currency:
+            changes["currency"] = [payment.currency, new_currency]
+        payment.amount = new_amount
+        payment.currency = new_currency
+        db.execute(
+            update(PaymentOccurrence)
+            .where(_future_unpaid(payment, today))
+            .values(amount=new_amount, currency=new_currency)
+            .execution_options(synchronize_session=False)
+        )
+    db.flush()
+    return changes
+
+
+def next_payment_date_for_schedule(db: Session, payment: RecurringPayment) -> date:
+    """Срок следующего ещё не созданного периода по расписанию."""
+    last = _last_occurrence(db, payment)
+    return scheduled_due_date(payment, payment.schedule_anchor_index if last is None else last.period_index + 1)
+
+
+def restore_payment(db: Session, payment: RecurringPayment) -> date | None:
+    """Возобновляет прекращённый платёж; коммит — за вызывающим. Возвращает срок первого нового периода.
+
+    Периоды, срок которых прошёл, пока платёж был прекращён, задним числом не создаются:
+    расписание продолжается с ближайшего срока, не раньше сегодняшнего дня.
+    """
+    today = local_today()
+    payment.deleted_at = None
+    last = _last_occurrence(db, payment)
+    index = payment.schedule_anchor_index if last is None else last.period_index + 1
+    if last is not None and last.status == PaymentStatus.UNPAID and last.due_date >= today:
+        return None
+    for _ in range(MAX_RESTORE_STEPS):
+        due = scheduled_due_date(payment, index)
+        if due >= today:
+            break
+        index += 1
+    else:
+        raise ValueError("Не удалось найти следующий срок по расписанию")
+    db.add(
+        PaymentOccurrence(
+            recurring_payment_id=payment.id,
+            period_index=index,
+            due_date=due,
+            amount=payment.amount,
+            currency=payment.currency,
+            status=PaymentStatus.UNPAID,
+        )
+    )
+    db.flush()
+    return due
 
 
 def occurrence_to_dict(occ: PaymentOccurrence, today: date | None = None) -> dict:

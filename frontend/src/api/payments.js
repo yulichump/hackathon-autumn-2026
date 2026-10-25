@@ -9,7 +9,13 @@ export const getRecurringPayments = (params) =>
 export const createRecurringPayment = (data) =>
   api.post('/recurring-payments', data).then((r) => r.data);
 
+export const updateRecurringPayment = (id, data) =>
+  api.patch(`/recurring-payments/${id}`, data).then((r) => r.data);
+
 export const deleteRecurringPayment = (id) => api.delete(`/recurring-payments/${id}`);
+
+export const restoreRecurringPayment = (id) =>
+  api.post(`/recurring-payments/${id}/restore`).then((r) => r.data);
 
 export const getOccurrences = (params) =>
   api.get('/payment-occurrences', { params: clean(params) }).then((r) => r.data);

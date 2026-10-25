@@ -241,6 +241,62 @@
           }
         }
       },
+      "patch": {
+        "tags": [
+          "Recurring payments"
+        ],
+        "summary": "Изменение регулярного платежа",
+        "description": "Можно менять название, сумму, валюту, периодичность и дату ближайшей оплаты. Изменения касаются только будущих неоплаченных периодов (срок сегодня и позже); прошлые, просроченные и оплаченные периоды не меняются. Новая дата ближайшей оплаты должна быть позже последнего сохранённого периода, иначе `409`. Прекращённый платёж сначала нужно восстановить (`409`).",
+        "operationId": "update_recurring_api_v1_recurring_payments__payment_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "payment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringPaymentUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringPaymentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "Recurring payments"
@@ -266,6 +322,54 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recurring-payments/{payment_id}/restore": {
+      "post": {
+        "tags": [
+          "Recurring payments"
+        ],
+        "summary": "Восстановление прекращённого платежа",
+        "description": "Платёж снова создаёт периоды и напоминания. Периоды, срок которых прошёл, пока платёж был прекращён, не создаются: расписание продолжается с ближайшего срока не раньше сегодняшнего дня. Для активного платежа ничего не меняет.",
+        "operationId": "restore_recurring_api_v1_recurring_payments__payment_id__restore_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "payment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringPaymentOut"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -1411,6 +1515,74 @@
           "created_at"
         ],
         "title": "RecurringPaymentOut"
+      },
+      "RecurringPaymentUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Currency"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_payment_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Payment Date",
+            "description": "Новая дата ближайшей оплаты: расписание продолжится с неё"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Period"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "RecurringPaymentUpdate",
+        "description": "Любое подмножество полей. Изменения применяются к будущим неоплаченным периодам, история не меняется."
       },
       "Role": {
         "type": "string",

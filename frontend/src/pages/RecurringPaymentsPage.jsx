@@ -24,6 +24,8 @@ import {
   createRecurringPayment,
   deleteRecurringPayment,
   getRecurringPayments,
+  restoreRecurringPayment,
+  updateRecurringPayment,
 } from '../api/payments';
 import ConfirmDialog from '../components/ConfirmDialog';
 import {
@@ -71,8 +73,27 @@ function InfoItem({ label, value }) {
   );
 }
 
-function CreatePaymentDialog({ onClose, onCreated }) {
-  const [form, setForm] = useState(EMPTY_FORM);
+const formFromPayment = (payment) => ({
+  name: payment.name,
+  amount: String(payment.amount),
+  currency: payment.currency,
+  next_payment_date: payment.next_payment_date || todayIso(),
+  period: payment.period,
+});
+
+const changedFields = (initial, form) =>
+  Object.fromEntries(
+    Object.entries(form)
+      .filter(([key, value]) =>
+        key === 'amount' ? Number(value) !== Number(initial.amount) : value !== initial[key],
+      )
+      .map(([key, value]) => [key, key === 'amount' ? Number(value) : value]),
+  );
+
+function PaymentFormDialog({ payment, onClose, onSaved }) {
+  const isEdit = Boolean(payment);
+  const initial = isEdit ? formFromPayment(payment) : EMPTY_FORM;
+  const [form, setForm] = useState(initial);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -82,14 +103,30 @@ function CreatePaymentDialog({ onClose, onCreated }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSaving(true);
 
+    if (isEdit) {
+      const changes = changedFields(initial, form);
+      if (Object.keys(changes).length === 0) {
+        onClose();
+        return;
+      }
+      setSaving(true);
+      try {
+        onSaved(await updateRecurringPayment(payment.id, changes), true);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Не удалось сохранить изменения'));
+        setSaving(false);
+      }
+      return;
+    }
+
+    setSaving(true);
     try {
       const created = await createRecurringPayment({
         ...form,
         amount: Number(form.amount),
       });
-      onCreated(created);
+      onSaved(created, false);
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось создать платёж'));
       setSaving(false);
@@ -100,13 +137,20 @@ function CreatePaymentDialog({ onClose, onCreated }) {
     <Dialog open onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
       <form onSubmit={handleSubmit}>
         <DialogTitle sx={{ pb: 1 }}>
-          Новый регулярный платёж
+          {isEdit ? 'Изменить регулярный платёж' : 'Новый регулярный платёж'}
         </DialogTitle>
 
         <DialogContent>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
+            </Alert>
+          )}
+
+          {isEdit && (
+            <Alert severity="info" sx={{ mb: 1 }}>
+              Изменения применятся к будущим неоплаченным периодам. Прошлые, просроченные
+              и оплаченные периоды останутся как есть.
             </Alert>
           )}
 
@@ -202,7 +246,9 @@ function CreatePaymentDialog({ onClose, onCreated }) {
             fullWidth
             sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
-            {saving ? 'Создание…' : 'Создать платёж'}
+            {isEdit
+              ? saving ? 'Сохранение…' : 'Сохранить'
+              : saving ? 'Создание…' : 'Создать платёж'}
           </Button>
         </DialogActions>
       </form>
@@ -210,7 +256,7 @@ function CreatePaymentDialog({ onClose, onCreated }) {
   );
 }
 
-function RecurringPaymentCard({ payment, isAdmin, onDelete }) {
+function RecurringPaymentCard({ payment, isAdmin, onEdit, onDelete, onRestore }) {
   const isDeleted = payment.is_deleted;
 
   return (
@@ -234,9 +280,8 @@ function RecurringPaymentCard({ payment, isAdmin, onDelete }) {
         <Stack spacing={2}>
           <Stack
             direction="row"
-            alignItems="flex-start"
-            justifyContent="space-between"
             spacing={1.5}
+            sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}
           >
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography
@@ -301,24 +346,45 @@ function RecurringPaymentCard({ payment, isAdmin, onDelete }) {
             />
           </Box>
 
-          {isAdmin && !isDeleted && (
+          {isAdmin && (
             <Box
               sx={{
                 display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
                 justifyContent: 'flex-end',
-                pt: 0.5,
+                gap: 1,
+                pt: 1.5,
                 borderTop: 1,
                 borderColor: 'divider',
               }}
             >
-              <Button
-                color="error"
-                variant="outlined"
-                onClick={() => onDelete(payment)}
-                sx={{ mt: 1, width: { xs: '100%', sm: 'auto' } }}
-              >
-                Прекратить платёж
-              </Button>
+              {isDeleted ? (
+                <Button
+                  variant="contained"
+                  onClick={() => onRestore(payment)}
+                  sx={{ width: { xs: '100%', sm: 'auto' } }}
+                >
+                  Восстановить
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outlined"
+                    onClick={() => onEdit(payment)}
+                    sx={{ width: { xs: '100%', sm: 'auto' } }}
+                  >
+                    Изменить
+                  </Button>
+                  <Button
+                    color="error"
+                    variant="outlined"
+                    onClick={() => onDelete(payment)}
+                    sx={{ width: { xs: '100%', sm: 'auto' } }}
+                  >
+                    Прекратить платёж
+                  </Button>
+                </>
+              )}
             </Box>
           )}
         </Stack>
@@ -332,7 +398,9 @@ export default function RecurringPaymentsPage() {
   const [payments, setPayments] = useState([]);
   const [showDeleted, setShowDeleted] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [toDelete, setToDelete] = useState(null);
+  const [toRestore, setToRestore] = useState(null);
   const [message, setMessage] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -361,13 +429,35 @@ export default function RecurringPaymentsPage() {
     setReloadKey((key) => key + 1);
   }, []);
 
-  const handleCreated = (created) => {
+  const handleSaved = (saved, isEdit) => {
     setCreating(false);
+    setEditing(null);
     setMessage({
       severity: 'success',
-      text: `Платёж «${created.name}» добавлен`,
+      text: isEdit ? `Платёж «${saved.name}» обновлён` : `Платёж «${saved.name}» добавлен`,
     });
     reload();
+  };
+
+  const handleRestore = async () => {
+    const payment = toRestore;
+    if (!payment) return;
+
+    setToRestore(null);
+
+    try {
+      const restored = await restoreRecurringPayment(payment.id);
+      setMessage({
+        severity: 'success',
+        text: `Платёж «${restored.name}» восстановлен, ближайшая оплата ${formatDate(restored.next_payment_date)}`,
+      });
+      reload();
+    } catch (err) {
+      setMessage({
+        severity: 'error',
+        text: getErrorMessage(err, 'Не удалось восстановить платёж'),
+      });
+    }
   };
 
   const handleDelete = async () => {
@@ -492,18 +582,39 @@ export default function RecurringPaymentsPage() {
               key={payment.id}
               payment={payment}
               isAdmin={isAdmin}
+              onEdit={setEditing}
               onDelete={setToDelete}
+              onRestore={setToRestore}
             />
           ))}
         </Box>
       )}
 
-      {creating && (
-        <CreatePaymentDialog
-          onClose={() => setCreating(false)}
-          onCreated={handleCreated}
+      {(creating || editing) && (
+        <PaymentFormDialog
+          key={editing ? editing.id : 'new'}
+          payment={editing}
+          onClose={() => {
+            setCreating(false);
+            setEditing(null);
+          }}
+          onSaved={handleSaved}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(toRestore)}
+        title="Восстановить регулярный платёж?"
+        text={
+          toRestore
+            ? `«${toRestore.name}» снова начнёт создавать периоды и напоминания. Сроки, прошедшие, пока платёж был прекращён, не создаются — расписание продолжится с ближайшей даты.`
+            : ''
+        }
+        confirmLabel="Восстановить"
+        confirmColor="primary"
+        onConfirm={handleRestore}
+        onClose={() => setToRestore(null)}
+      />
 
       <ConfirmDialog
         open={Boolean(toDelete)}

@@ -1,6 +1,14 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 
-export default function ConfirmDialog({ open, title, text, confirmLabel = 'Удалить', onConfirm, onClose }) {
+export default function ConfirmDialog({
+  open,
+  title,
+  text,
+  confirmLabel = 'Удалить',
+  confirmColor = 'error',
+  onConfirm,
+  onClose,
+}) {
   return (
     <Dialog open={open} onClose={onClose}>
       <DialogTitle>{title}</DialogTitle>
@@ -9,7 +17,7 @@ export default function ConfirmDialog({ open, title, text, confirmLabel = 'Уд�
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Отмена</Button>
-        <Button color="error" variant="contained" onClick={onConfirm}>{confirmLabel}</Button>
+        <Button color={confirmColor} variant="contained" onClick={onConfirm}>{confirmLabel}</Button>
       </DialogActions>
     </Dialog>
   );

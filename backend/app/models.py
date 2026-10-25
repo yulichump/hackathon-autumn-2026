@@ -122,6 +122,7 @@ class RecurringPayment(Base):
     __table_args__ = (
         CheckConstraint("amount > 0", name="amount_positive"),
         CheckConstraint("char_length(btrim(name)) > 0", name="name_not_blank"),
+        CheckConstraint("schedule_anchor_index >= 0", name="schedule_anchor_index_non_negative"),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
@@ -132,6 +133,7 @@ class RecurringPayment(Base):
     period: Mapped[Period] = mapped_column(
         pg_enum(Period, "payment_period"), default=Period.MONTHLY, server_default=Period.MONTHLY.value
     )
+    schedule_anchor_index: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()

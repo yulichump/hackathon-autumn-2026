@@ -6,7 +6,7 @@ from sqlalchemy import select
 from ..config import local_today
 from ..deps import AdminUser, CurrentUser, DbSession
 from ..models import AuditLog, Currency, PaymentOccurrence, PaymentStatus, RecurringPayment
-from ..payments import add_months, compute_summary, due_date_for, ensure_occurrences
+from ..payments import add_months, compute_summary, ensure_occurrences, scheduled_due_date
 from ..schemas import AuditLogOut, BudgetCurrency, BudgetResponse, CurrencySummary
 
 router = APIRouter(tags=["Summary"])
@@ -52,13 +52,14 @@ def payments_budget(
         if occ.status == PaymentStatus.PAID:
             budget[Currency(occ.currency)].paid += occ.amount
 
+    today = local_today()
     for payment in db.scalars(select(RecurringPayment).where(RecurringPayment.deleted_at.is_(None))):
-        index = 0
-        while (due := due_date_for(payment.start_date, payment.period, index)) < end:
-            if due >= start and (payment.id, due) not in known:
+        index = payment.schedule_anchor_index
+        while (due := scheduled_due_date(payment, index)) < end:
+            if due >= start and due >= today and (payment.id, due) not in known:
                 budget[Currency(payment.currency)].planned += payment.amount
             index += 1
-            if index > 5000:
+            if index - payment.schedule_anchor_index > 5000:
                 break
     return BudgetResponse(date_from=start, date_to=end - timedelta(days=1), currencies=budget)
 

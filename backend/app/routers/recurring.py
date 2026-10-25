@@ -6,8 +6,8 @@ from ..config import local_today, utcnow
 from ..deps import AdminUser, CurrentUser, DbSession
 from ..models import PaymentOccurrence, PaymentStatus, RecurringPayment
 from ..notifications import trigger_reminders
-from ..payments import ensure_occurrences, recurring_to_dict
-from ..schemas import RecurringPaymentCreate, RecurringPaymentOut
+from ..payments import ScheduleConflictError, ensure_occurrences, recurring_to_dict, restore_payment, update_payment
+from ..schemas import RecurringPaymentCreate, RecurringPaymentOut, RecurringPaymentUpdate
 
 router = APIRouter(prefix="/recurring-payments", tags=["Recurring payments"])
 
@@ -51,6 +51,63 @@ def create_recurring(body: RecurringPaymentCreate, admin: AdminUser, db: DbSessi
     db.commit()
     ensure_occurrences(db, [payment])
     background.add_task(trigger_reminders)
+    return recurring_to_dict(db, payment)
+
+
+@router.patch(
+    "/{payment_id}",
+    response_model=RecurringPaymentOut,
+    summary="Изменение регулярного платежа",
+    description=(
+        "Можно менять название, сумму, валюту, периодичность и дату ближайшей оплаты. Изменения касаются только "
+        "будущих неоплаченных периодов (срок сегодня и позже); прошлые, просроченные и оплаченные периоды не меняются. "
+        "Новая дата ближайшей оплаты должна быть позже последнего сохранённого периода, иначе `409`. "
+        "Прекращённый платёж сначала нужно восстановить (`409`)."
+    ),
+)
+def update_recurring(
+    payment_id: int, body: RecurringPaymentUpdate, admin: AdminUser, db: DbSession, background: BackgroundTasks
+):
+    payment = _get_payment(db, payment_id)
+    if payment.is_deleted:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Платёж прекращён — сначала восстановите его")
+    fields = body.model_dump(exclude_unset=True, exclude_none=True)
+    try:
+        changes = update_payment(db, payment, **fields)
+    except ScheduleConflictError as exc:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"Дата ближайшей оплаты должна быть позже последнего сохранённого периода "
+            f"({exc.last_kept.strftime('%d.%m.%Y')})",
+        )
+    if changes:
+        log_action(db, admin, "recurring.update", {"id": payment.id, "changes": changes})
+    db.commit()
+    ensure_occurrences(db, [payment])
+    if changes:
+        background.add_task(trigger_reminders)
+    return recurring_to_dict(db, payment)
+
+
+@router.post(
+    "/{payment_id}/restore",
+    response_model=RecurringPaymentOut,
+    summary="Восстановление прекращённого платежа",
+    description=(
+        "Платёж снова создаёт периоды и напоминания. Периоды, срок которых прошёл, пока платёж был прекращён, "
+        "не создаются: расписание продолжается с ближайшего срока не раньше сегодняшнего дня. "
+        "Для активного платежа ничего не меняет."
+    ),
+)
+def restore_recurring(payment_id: int, admin: AdminUser, db: DbSession, background: BackgroundTasks):
+    payment = _get_payment(db, payment_id)
+    if payment.is_deleted:
+        first_due = restore_payment(db, payment)
+        log_action(db, admin, "recurring.restore", {"id": payment.id, "name": payment.name, "first_due": first_due})
+        db.commit()
+        ensure_occurrences(db, [payment])
+        background.add_task(trigger_reminders)
     return recurring_to_dict(db, payment)
 
 
